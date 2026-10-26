@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>方向三 · SQL 工作室</title>
+  <!--
+    方向假设：
+    1. 这是单人、桌面优先的审计数据工作台，数据均为虚构示例，SQL 只展示不执行。
+    2. form 来自“可追溯的技术资产”：对象树回答资产在哪里，代码区回答逻辑是什么，右栏回答谁在何时改过什么。
+    3. 深色不是装饰主题，而是为了让长时间 SQL 阅读、依赖检查和版本比对处在同一个稳定工作环境中。
+    4. 首页不伪装成终端，仍以任务、项目、请求和常用入口组织个人工作；仅在资产详情中提高代码与运行记录的视觉权重。
+  -->
+  <style>
+    :root{
+      --bg:#0b0e11;--shell:#101419;--panel:#151a20;--panel2:#1a2027;--line:#2a323b;
+      --line2:#36414c;--text:#eef2f5;--muted:#94a0ad;--faint:#697581;--mint:#5ee0b1;
+      --mint-ink:#09261d;--blue:#74a8ff;--amber:#f0b86a;--red:#ff7a86;--violet:#c8a5ff;
+      --sans:"Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif;
+      --mono:"Cascadia Code","Consolas","SFMono-Regular",monospace;
+      --top:58px;--rail:248px;--aside:310px;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px}
+    body{overflow:hidden}
+    button,input,select{font:inherit}
+    button{color:inherit}
+    button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+    .app{height:100vh;display:grid;grid-template-rows:var(--top) 1fr;background:var(--bg)}
+    .topbar{display:grid;grid-template-columns:var(--rail) minmax(320px,720px) 1fr;align-items:center;border-bottom:1px solid var(--line);background:#0d1115;z-index:8}
+    .brand{height:100%;display:flex;align-items:center;gap:12px;padding:0 18px;border-right:1px solid var(--line);font-weight:680;letter-spacing:.01em}
+    .brand-mark{width:25px;height:25px;display:grid;place-items:center;border:1px solid var(--mint);color:var(--mint);font:700 12px var(--mono);position:relative}
+    .brand-mark:after{content:"";position:absolute;width:5px;height:5px;background:var(--mint);right:-3px;bottom:-3px}
+    .brand small{font:500 10px var(--mono);color:var(--muted);display:block;margin-top:2px;letter-spacing:.12em}
+    .search-wrap{padding:0 16px;position:relative}
+    .global-search{height:38px;width:100%;border:1px solid var(--line2);background:#141920;color:var(--text);padding:0 86px 0 38px;border-radius:5px}
+    .global-search::placeholder{color:#7e8995}
+    .search-icon{position:absolute;left:28px;top:10px;width:18px;color:var(--muted);pointer-events:none}
+    .keycap{position:absolute;right:27px;top:9px;border:1px solid var(--line2);background:#20262d;color:var(--muted);font:11px var(--mono);padding:3px 7px;border-radius:3px}
+    .top-actions{justify-self:end;display:flex;align-items:center;height:100%;gap:4px;padding-right:14px}
+    .icon-btn{width:44px;height:44px;border:0;background:transparent;display:grid;place-items:center;color:var(--muted);cursor:pointer}
+    .icon-btn:hover{background:var(--panel2);color:var(--text)}
+    .icon{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+    .profile{display:flex;align-items:center;gap:9px;border-left:1px solid var(--line);padding-left:14px;margin-left:6px;color:var(--muted);font-size:13px}
+    .avatar{width:30px;height:30px;border:1px solid var(--line2);display:grid;place-items:center;color:var(--mint);font:700 11px var(--mono);background:#18201f}
+
+    .frame{min-height:0;display:grid;grid-template-columns:var(--rail) minmax(0,1fr)}
+    .rail{min-height:0;background:#0e1216;border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:auto}
+    .nav-section{padding:16px 10px 10px}
+    .nav-label{padding:0 10px 8px;color:var(--faint);font:600 10px var(--mono);letter-spacing:.12em;text-transform:uppercase}
+    .nav-btn{width:100%;height:44px;border:0;background:transparent;display:flex;align-items:center;gap:11px;padding:0 10px;color:#aeb8c3;text-align:left;border-radius:4px;cursor:pointer;position:relative}
+    .nav-btn:hover{background:#171d23;color:var(--text)}
+    .nav-btn.active{background:#19241f;color:#effff9}
+    .nav-btn.active:before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:2px;background:var(--mint)}
+    .nav-btn .count{margin-left:auto;color:var(--faint);font:11px var(--mono)}
+    .tree{border-top:1px solid var(--line);padding:15px 10px 20px}
+    .tree-head{display:flex;align-items:center;justify-content:space-between;padding:0 10px 10px;color:var(--muted);font-size:12px}
+    .tree-head button{border:0;background:transparent;color:var(--muted);width:32px;height:32px;cursor:pointer}
+    .tree-group{margin-bottom:8px}
+    .tree-title{height:34px;display:flex;align-items:center;gap:8px;color:#b6c0ca;padding:0 9px;font-size:13px}
+    .chev{color:var(--faint);font:11px var(--mono)}
+    .tree-item{min-height:36px;display:flex;align-items:center;gap:8px;padding:6px 7px 6px 28px;color:#85919d;font-size:12px;border:1px solid transparent;cursor:pointer;border-radius:3px}
+    .tree-item:hover,.tree-item.selected{color:var(--text);background:#151b21;border-color:#273039}
+    .dot{width:7px;height:7px;border:1px solid currentColor;border-radius:50%;flex:0 0 auto}
+    .rail-foot{margin-top:auto;border-top:1px solid var(--line);padding:13px 18px;color:var(--faint);font:11px/1.5 var(--mono)}
+    .sync{display:flex;align-items:center;gap:8px;color:#9db4aa}.sync i{width:7px;height:7px;background:var(--mint);border-radius:50%;box-shadow:0 0 0 3px #19362c}
+
+    main{min-width:0;min-height:0;overflow:hidden;background:var(--shell)}
+    .view{display:none;height:100%;min-height:0}.view.active{display:grid}
+    .crumbs{height:45px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:0 20px;color:var(--muted);font:12px var(--mono);background:#11161b}
+    .crumbs strong{color:#dfe5e9;font-weight:600}.slash{color:#4b5661}
+    .page-title{font-size:22px;line-height:1.2;margin:0;font-weight:630;letter-spacing:-.015em}
+    .subtext{color:var(--muted);font-size:13px;margin:7px 0 0;line-height:1.65}
+    .status{display:inline-flex;align-items:center;gap:7px;min-height:24px;padding:0 8px;border:1px solid var(--line2);font:11px var(--mono);color:#b9c3cc;white-space:nowrap}
+    .status:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--muted)}
+    .status.ok{border-color:#2d5849;color:#96d9c1;background:#14251f}.status.ok:before{background:var(--mint)}
+    .status.warn{border-color:#5c4930;color:#f0c98d;background:#251e15}.status.warn:before{background:var(--amber)}
+    .status.wait{border-color:#3b4959;color:#a8c0df;background:#151d27}.status.wait:before{background:var(--blue)}
+    .btn{min-height:40px;border:1px solid var(--line2);background:#1a2027;padding:0 14px;color:#dce3e8;cursor:pointer;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .btn:hover{background:#222a32;border-color:#53606c}.btn.primary{background:var(--mint);border-color:var(--mint);color:var(--mint-ink);font-weight:700}.btn.primary:hover{background:#79e8c1}
+    .btn.small{min-height:34px;padding:0 10px;font-size:12px}
+
+    /* Home: readable work summary, not a faux terminal. */
+    #home{grid-template-rows:45px 1fr}
+    .home-scroll{overflow:auto;padding:24px 26px 38px}
+    .home-head{display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--line2)}
+    .date{font:12px var(--mono);color:var(--mint);letter-spacing:.05em;margin-bottom:8px}
+    .home-actions{display:flex;gap:8px}
+    .pulse-line{display:flex;align-items:center;gap:10px;color:var(--muted);font:12px var(--mono)}
+    .pulse-line svg{width:122px;height:24px}.pulse-line polyline{fill:none;stroke:var(--mint);stroke-width:1.5}
+    .work-grid{display:grid;grid-template-columns:minmax(420px,1.35fr) minmax(300px,.9fr);gap:0;border-bottom:1px solid var(--line2)}
+    .section{padding:22px 22px 24px 0;border-right:1px solid var(--line2)}
+    .section:nth-child(2){padding-left:24px;border-right:0}
+    .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .section-title{font-size:14px;font-weight:650;letter-spacing:.01em}.section-meta{color:var(--muted);font:11px var(--mono)}
+    .task{min-height:49px;display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:center;border-top:1px solid #242c34;gap:8px}
+    .task:last-child{border-bottom:1px solid #242c34}
+    .task input{appearance:none;width:17px;height:17px;border:1px solid #52606d;background:#11161b;cursor:pointer;position:relative}
+    .task input:checked{border-color:var(--mint);background:var(--mint)}
+    .task input:checked:after{content:"";position:absolute;left:4px;top:1px;width:5px;height:9px;border:solid #09261d;border-width:0 2px 2px 0;transform:rotate(45deg)}
+    .task input:checked + .task-name{text-decoration:line-through;color:var(--faint)}
+    .task-name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.task-time{color:var(--faint);font:11px var(--mono)}
+    .summary-strip{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line2);margin-bottom:18px}
+    .metric{padding:13px 14px;border-right:1px solid var(--line2)}.metric:last-child{border:0}.metric b{display:block;font:600 24px var(--mono);color:#f4f7f9}.metric span{color:var(--muted);font-size:11px}
+    .project-row{padding:12px 0;border-top:1px solid #242c34}.project-row:last-child{border-bottom:1px solid #242c34}.project-top{display:flex;justify-content:space-between;gap:12px;font-size:13px}.project-top span:last-child{font:11px var(--mono);color:var(--muted)}
+    .progress{height:3px;background:#252d35;margin-top:9px}.progress i{display:block;height:100%;background:var(--mint)}
+    .lower-grid{display:grid;grid-template-columns:1.35fr .9fr;gap:0}
+    .request-table{width:100%;border-collapse:collapse;font-size:12px}.request-table th{text-align:left;color:var(--faint);font:10px var(--mono);letter-spacing:.08em;padding:9px 8px;border-bottom:1px solid var(--line2)}.request-table td{padding:12px 8px;border-bottom:1px solid #252d35;color:#bdc6ce}.request-table td:first-child{color:var(--text)}
+    .links{display:grid;grid-template-columns:repeat(2,1fr);border-top:1px solid #252d35;border-left:1px solid #252d35}.quick{min-height:70px;border:0;border-right:1px solid #252d35;border-bottom:1px solid #252d35;background:transparent;text-align:left;padding:12px;color:#cdd5dc;cursor:pointer}.quick:hover{background:#18201f;color:var(--mint)}.quick small{display:block;color:var(--faint);margin-top:5px;font:10px var(--mono)}
+
+    /* SQL asset library */
+    #library{grid-template-rows:45px auto auto 1fr}
+    .page-head{min-height:92px;display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
+    .filters{min-height:56px;display:flex;align-items:center;gap:8px;padding:8px 20px;border-bottom:1px solid var(--line);background:#12171c}
+    .filter-input,.filter-select{height:36px;border:1px solid var(--line2);background:#171d23;color:#dbe2e7;border-radius:3px;padding:0 11px;font-size:12px}.filter-input{width:min(330px,38%)}.filter-select{min-width:128px}
+    .table-wrap{overflow:auto}
+    .asset-table{width:100%;min-width:990px;border-collapse:collapse;font-size:12px}
+    .asset-table th{position:sticky;top:0;z-index:2;height:39px;text-align:left;padding:0 13px;background:#181e24;border-bottom:1px solid var(--line2);color:#8995a1;font:10px var(--mono);letter-spacing:.06em}
+    .asset-table td{height:58px;padding:8px 13px;border-bottom:1px solid #252d35;color:#aeb8c1;vertical-align:middle}
+    .asset-table tr{cursor:pointer}.asset-table tbody tr:hover,.asset-table tr.selected{background:#18221f}.asset-table tr.selected td:first-child{box-shadow:inset 2px 0 var(--mint)}
+    .asset-name{color:#edf2f5;font-weight:620}.asset-purpose{color:var(--muted);font-size:11px;margin-top:4px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    code.inline{font:11px var(--mono);color:#9ab6d7;background:#131a21;border:1px solid #263443;padding:3px 6px}
+    .tag{display:inline-block;padding:3px 6px;border:1px solid #34414d;color:#96a4b1;font:10px var(--mono);margin:2px 3px 2px 0}
+    .uses{font:12px var(--mono);color:var(--mint)}
+
+    /* SQL detail: object tree stays global; code gets the visual center. */
+    #sql-detail{grid-template-rows:45px 1fr}
+    .studio{min-height:0;display:grid;grid-template-columns:minmax(470px,1fr) var(--aside)}
+    .workbench{min-width:0;min-height:0;display:grid;grid-template-rows:auto 1fr 188px;border-right:1px solid var(--line)}
+    .editor-head{min-height:84px;padding:15px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:14px;align-items:center}
+    .editor-title{display:flex;align-items:center;gap:11px;min-width:0}.file-sign{width:33px;height:38px;border:1px solid #3b4c5d;display:grid;place-items:center;color:var(--blue);font:700 10px var(--mono);background:#151e27}.editor-title h1{font-size:16px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.editor-title p{margin:5px 0 0;color:var(--muted);font-size:11px}
+    .editor-actions{display:flex;align-items:center;gap:8px}.version-select{height:36px;border:1px solid var(--line2);background:#181e24;color:#dce3e8;padding:0 8px;font:11px var(--mono)}
+    .code-pane{min-height:0;overflow:auto;background:#0f1317;position:relative}
+    .code-toolbar{position:sticky;top:0;z-index:2;height:34px;padding:0 15px;border-bottom:1px solid #222a31;background:#11161b;display:flex;align-items:center;justify-content:space-between;color:#687581;font:10px var(--mono)}
+    pre{margin:0;min-width:720px;padding:14px 18px 32px 0;counter-reset:line;font:13px/1.72 var(--mono);tab-size:2;color:#cbd5dc}
+    .line{display:block;min-height:22px;white-space:pre}.line:before{counter-increment:line;content:counter(line);display:inline-block;width:46px;margin-right:18px;text-align:right;color:#48545f;user-select:none}.kw{color:var(--violet)}.fn{color:var(--blue)}.str{color:#a9d89b}.cm{color:#5f6b75;font-style:italic}.num{color:var(--amber)}.field{color:#dce6ec}.param{color:#ffb0a7}
+    .result-panel{min-height:0;overflow:auto;border-top:1px solid var(--line);background:#12171c}
+    .tabs{height:38px;display:flex;align-items:stretch;border-bottom:1px solid var(--line)}
+    .tab{min-width:100px;border:0;border-right:1px solid var(--line);background:transparent;color:var(--muted);font-size:11px;cursor:pointer}.tab.active{color:var(--text);box-shadow:inset 0 -2px var(--mint);background:#151b20}
+    .result-table{width:100%;border-collapse:collapse;font:11px var(--mono)}.result-table th,.result-table td{text-align:left;padding:8px 11px;border-right:1px solid #242d35;border-bottom:1px solid #242d35}.result-table th{color:#798692;font-weight:500}.result-table td{color:#bcc7cf}.result-table td.bad{color:var(--red)}
+    .inspector{min-height:0;overflow:auto;background:#12171c}
+    .inspector-title{height:46px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--line);font-size:12px;font-weight:650}
+    .inspect-section{padding:16px;border-bottom:1px solid var(--line)}
+    .inspect-label{color:var(--faint);font:10px var(--mono);letter-spacing:.08em;margin-bottom:10px}
+    .inspect-copy{font-size:12px;color:#c2cbd2;line-height:1.75;margin:0}
+    .ai-note{border:1px solid #3a4854;background:#171d23;padding:11px;font-size:11px;line-height:1.65;color:#aeb9c2}.ai-note b{display:block;color:var(--blue);font:10px var(--mono);margin-bottom:5px;letter-spacing:.05em}
+    .kv{display:grid;grid-template-columns:84px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid #222a31;font-size:11px}.kv span:first-child{color:var(--faint)}.kv span:last-child{color:#c4ccd3;font-family:var(--mono);word-break:break-word}
+    .version-row{display:grid;grid-template-columns:34px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid #222a31}.ver{font:10px var(--mono);color:var(--mint)}.version-row b{font-size:11px;font-weight:600}.version-row p{margin:4px 0 0;color:var(--faint);font-size:10px}
+
+    /* Model detail */
+    #model{grid-template-rows:45px auto 45px 1fr}
+    .model-head{min-height:104px;padding:17px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+    .model-title-wrap{display:flex;align-items:center;gap:14px}.model-glyph{width:45px;height:45px;border:1px solid #3c5e51;display:grid;place-items:center;color:var(--mint);background:#14211c}.model-glyph svg{width:25px}
+    .model-meta{display:flex;gap:18px;color:var(--muted);font:11px var(--mono);margin-top:7px}
+    .model-tabs{display:flex;align-items:stretch;padding:0 20px;border-bottom:1px solid var(--line);background:#12171c;overflow-x:auto}
+    .model-tab{min-width:104px;border:0;background:transparent;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}.model-tab.active{color:var(--text);border-color:var(--mint)}
+    .model-body{min-height:0;overflow:auto;padding:22px}
+    .model-panel{display:none}.model-panel.active{display:block}
+    .two-col{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr);gap:22px}
+    .block{border-top:1px solid var(--line2);padding:15px 0 22px}.block h3{font-size:13px;margin:0 0 12px}.rule{font:12px/1.8 var(--mono);color:#c8d2d9;background:#0e1317;padding:14px;border:1px solid #28323a}.rule .op{color:var(--violet)}.rule .val{color:var(--amber)}
+    .run-row{display:grid;grid-template-columns:110px 1fr 72px 82px;align-items:center;min-height:44px;border-bottom:1px solid #252d35;font-size:11px}.run-row span:first-child{font-family:var(--mono);color:#8e9aa5}.run-row strong{font:600 11px var(--mono)}
+    .mini-bar{height:4px;background:#273039}.mini-bar i{display:block;height:100%;background:var(--mint)}
+    .dependency{display:grid;grid-template-columns:12px 110px 1fr;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid #252d35;font-size:12px}.dependency .line-dot{width:8px;height:8px;border:2px solid var(--blue);border-radius:50%}.dependency code{color:#a9bfd7;font-family:var(--mono);font-size:11px}
+    .check-step{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:start;padding:13px 0;border-bottom:1px solid #252d35}.check-step input{appearance:none;width:18px;height:18px;border:1px solid #53616e;background:#10151a;margin:1px 0 0;cursor:pointer;position:relative}.check-step input:checked{background:var(--mint);border-color:var(--mint)}.check-step input:checked:after{content:"";position:absolute;left:5px;top:2px;width:4px;height:8px;border:solid #09261d;border-width:0 2px 2px 0;transform:rotate(45deg)}.check-step b{font-size:12px}.check-step p{margin:4px 0 0;color:var(--muted);font-size:11px;line-height:1.5}.step-state{font:10px var(--mono);color:var(--faint)}
+    .version-log{display:grid;grid-template-columns:80px 120px 1fr;gap:12px;min-height:48px;align-items:center;border-bottom:1px solid #252d35;font-size:12px}.version-log code{color:var(--mint)}.version-log time{color:var(--faint);font:11px var(--mono)}
+
+    .search-pop{display:none;position:fixed;z-index:20;top:51px;left:calc(var(--rail) + 16px);width:min(700px,calc(100vw - var(--rail) - 30px));background:#171d23;border:1px solid #43505d;box-shadow:0 18px 50px #0009;padding:8px}
+    .search-pop.show{display:block}.search-tip{padding:10px 12px;color:var(--muted);font-size:12px;border-bottom:1px solid var(--line)}.search-hit{height:48px;display:flex;align-items:center;gap:12px;padding:0 12px;color:#c7d0d7;font-size:12px}.search-hit:hover{background:#20282f}.search-hit code{margin-left:auto;color:var(--faint);font:10px var(--mono)}
+    .toast{position:fixed;right:20px;bottom:20px;z-index:30;background:#eafaf4;color:#102a21;border-left:4px solid var(--mint);padding:12px 16px;font-size:12px;box-shadow:0 12px 30px #0008;transform:translateY(90px);opacity:0;transition:.22s ease}.toast.show{transform:none;opacity:1}
+
+    @media(max-width:760px){
+      :root{--top:104px}
+      body{overflow:auto}.app{height:auto;min-height:100vh;display:block}.topbar{height:104px;position:sticky;top:0;grid-template-columns:1fr auto;grid-template-rows:52px 52px}.brand{border-right:0}.brand small,.profile span{display:none}.top-actions{grid-column:2;grid-row:1}.search-wrap{grid-column:1/3;grid-row:2;padding:6px 12px;border-top:1px solid var(--line)}.global-search{height:40px}.search-icon{left:24px;top:16px}.keycap{right:22px;top:15px}
+      .frame{display:block}.rail{position:sticky;top:104px;z-index:7;display:block;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;background:#0e1216}.nav-section{display:flex;padding:6px;gap:3px;min-width:500px}.nav-label,.tree,.rail-foot{display:none}.nav-btn{width:auto;min-width:112px;padding:0 12px;justify-content:center}.nav-btn.active:before{left:12px;right:12px;top:auto;bottom:2px;width:auto;height:2px}
+      main{overflow:visible}.view,.view.active{height:auto;min-height:calc(100vh - 154px)}.crumbs{display:none}
+      #home.active,#library.active,#sql-detail.active,#model.active{display:block}.home-scroll{padding:18px 15px 30px}.home-head{align-items:flex-start;gap:16px}.home-actions{display:none}.page-title{font-size:20px}.work-grid,.lower-grid{grid-template-columns:1fr}.section,.section:nth-child(2){padding:20px 0;border-right:0}.section:nth-child(2){border-top:1px solid var(--line2)}.pulse-line{display:none}.summary-strip{margin-top:2px}.metric{padding:11px 9px}.metric b{font-size:20px}.links{grid-template-columns:1fr 1fr}
+      .page-head{padding:15px;min-height:86px}.page-head .btn{display:none}.filters{padding:9px 12px;overflow-x:auto}.filter-input{min-width:230px}.table-wrap{max-height:none}.asset-table td{height:62px}
+      .studio{display:block}.workbench{display:block;border-right:0}.editor-head{padding:12px;align-items:flex-start}.editor-actions{flex-direction:column;align-items:stretch}.editor-actions .btn{min-height:36px}.code-pane{height:430px}.result-panel{height:190px}.inspector{border-top:1px solid var(--line);max-height:none}.inspect-section{padding:16px 14px}
+      .model-head{padding:15px;align-items:flex-start;gap:10px}.model-head>.status{display:none}.model-meta{display:block;line-height:1.8}.model-tabs{padding:0}.model-tab{min-width:98px;height:44px}.model-body{padding:16px 14px}.two-col{grid-template-columns:1fr}.run-row{grid-template-columns:92px 1fr 60px}.run-row span:last-child{display:none}.version-log{grid-template-columns:62px 95px 1fr}.search-pop{top:98px;left:12px;width:calc(100vw - 24px)}.toast{left:14px;right:14px;bottom:14px}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">AW</span><span>审计工作室<small>AUDIT WORKBENCH</small></span></div>
+    <div class="search-wrap">
+      <svg class="icon search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="globalSearch" class="global-search" type="search" placeholder="搜索 SQL、模型、数据请求或项目">
+      <span class="keycap">Ctrl K</span>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" title="新增记录"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="icon-btn" title="通知"><svg class="icon" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button>
+      <div class="profile"><span>本地工作区</span><i class="avatar">DA</i></div>
+    </div>
+  </header>
+
+  <div class="frame">
+    <aside class="rail">
+      <nav class="nav-section" aria-label="主导航">
+        <div class="nav-label">工作区</div>
+        <button class="nav-btn active" data-view="home"><svg class="icon" viewBox="0 0 24 24"><path d="M4 4h6v7H4zM14 4h6v4h-6zM14 12h6v8h-6zM4 15h6v5H4z"/></svg>首页<span class="count">05</span></button>
+        <button class="nav-btn" data-view="library"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 9h8M8 13h8M8 17h5"/></svg>SQL 资产<span class="count">34</span></button>
+        <button class="nav-btn" data-view="sql-detail"><svg class="icon" viewBox="0 0 24 24"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 4l-4 16"/></svg>SQL 详情</button>
+        <button class="nav-btn" data-view="model"><svg class="icon" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M8 7.5l3 8M16 7.5l-3 8M8 6h8"/></svg>监测模型<span class="count">08</span></button>
+      </nav>
+      <div class="tree">
+        <div class="tree-head"><span>资源浏览器</span><button title="新增资源">＋</button></div>
+        <div class="tree-group">
+          <div class="tree-title"><span class="chev">⌄</span>查询集合</div>
+          <div class="tree-item selected" data-open-detail><i class="dot"></i>采购付款异常明细</div>
+          <div class="tree-item"><i class="dot"></i>固定资产处置审批链</div>
+          <div class="tree-item"><i class="dot"></i>供应商关联交易识别</div>
+          <div class="tree-item"><i class="dot"></i>模型结果汇总</div>
+        </div>
+        <div class="tree-group">
+          <div class="tree-title"><span class="chev">⌄</span>监测模型</div>
+          <div class="tree-item" data-open-model><i class="dot"></i>采购异常监测模型</div>
+          <div class="tree-item"><i class="dot"></i>资产处置合规模型</div>
+        </div>
+        <div class="tree-group">
+          <div class="tree-title"><span class="chev">›</span>存储过程</div>
+        </div>
+      </div>
+      <footer class="rail-foot"><div class="sync"><i></i>本地数据已同步</div><div>最后更新 09:42:18</div></footer>
+    </aside>
+
+    <main>
+      <section class="view active" id="home">
+        <div class="crumbs"><strong>工作室</strong><span class="slash">/</span><span>今日工作</span></div>
+        <div class="home-scroll">
+          <div class="home-head">
+            <div><div class="date">2026.10.20 · 周二</div><h1 class="page-title">上午好，今天先把证据链补完整。</h1><p class="subtext">5 项待办 · 2 个模型等待复核 · 1 个数据请求今日到期</p></div>
+            <div class="home-actions"><div class="pulse-line"><svg viewBox="0 0 122 24"><polyline points="0,15 14,15 18,8 24,19 31,12 42,12 47,5 53,18 63,11 74,11 80,15 89,8 95,15 122,15"/></svg>模型运行稳定</div><button class="btn primary">新增工作记录</button></div>
+          </div>
+          <div class="work-grid">
+            <section class="section">
+              <div class="section-head"><span class="section-title">今日待办</span><span class="section-meta" id="taskCount">0 / 5 完成</span></div>
+              <label class="task"><input class="task-check" type="checkbox"><span class="task-name">复核采购异常模型本周命中样本</span><time class="task-time">10:30</time></label>
+              <label class="task"><input class="task-check" type="checkbox"><span class="task-name">补充固定资产盘点差异取数口径</span><time class="task-time">11:20</time></label>
+              <label class="task"><input class="task-check" type="checkbox"><span class="task-name">更新供应商关联识别 SQL 参数说明</span><time class="task-time">14:00</time></label>
+              <label class="task"><input class="task-check" type="checkbox"><span class="task-name">整理审计报告数据支撑清单</span><time class="task-time">15:40</time></label>
+              <label class="task"><input class="task-check" type="checkbox"><span class="task-name">记录制度知识库向量化测试结论</span><time class="task-time">17:00</time></label>
+            </section>
+            <section class="section">
+              <div class="summary-strip"><div class="metric"><b>05</b><span>今日待办</span></div><div class="metric"><b>12</b><span>本周完成</span></div><div class="metric"><b>03</b><span>等待他人</span></div></div>
+              <div class="section-head"><span class="section-title">重点项目</span><span class="section-meta">3 项进行中</span></div>
+              <div class="project-row"><div class="project-top"><span>采购异常监测模型</span><span>78%</span></div><div class="progress"><i style="width:78%"></i></div></div>
+              <div class="project-row"><div class="project-top"><span>审计报告数据支撑</span><span>52%</span></div><div class="progress"><i style="width:52%"></i></div></div>
+              <div class="project-row"><div class="project-top"><span>制度知识库</span><span>34%</span></div><div class="progress"><i style="width:34%"></i></div></div>
+            </section>
+          </div>
+          <div class="lower-grid">
+            <section class="section"><div class="section-head"><span class="section-title">最近数据请求</span><span class="section-meta">查看全部 18</span></div><table class="request-table"><thead><tr><th>请求</th><th>状态</th><th>更新时间</th></tr></thead><tbody><tr><td>固定资产盘点差异</td><td><span class="status warn">待确认口径</span></td><td>09:18</td></tr><tr><td>采购付款明细</td><td><span class="status ok">已交付</span></td><td>昨日</td></tr><tr><td>供应商关联分析</td><td><span class="status wait">处理中</span></td><td>10.18</td></tr></tbody></table></section>
+            <section class="section"><div class="section-head"><span class="section-title">常用入口</span><span class="section-meta">固定 5 项</span></div><div class="links"><button class="quick">审计系统<small>AUDIT</small></button><button class="quick">数据仓库<small>DWH</small></button><button class="quick">BI 平台<small>REPORT</small></button><button class="quick">法规库<small>POLICY</small></button><button class="quick">知识库<small>KNOWLEDGE</small></button></div></section>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="library">
+        <div class="crumbs"><strong>资产</strong><span class="slash">/</span><span>SQL 查询库</span></div>
+        <div class="page-head"><div><h1 class="page-title">SQL 查询库</h1><p class="subtext">保存、复用并追踪每一段取数逻辑的变更。</p></div><button class="btn primary">新建 SQL 记录</button></div>
+        <div class="filters"><input id="assetFilter" class="filter-input" placeholder="在 34 条 SQL 中搜索"><select class="filter-select"><option>全部项目</option><option>采购异常监测</option><option>资产审计</option></select><select class="filter-select"><option>全部标签</option><option>采购</option><option>固定资产</option></select><select class="filter-select"><option>全部状态</option><option>已验证</option><option>待复核</option></select></div>
+        <div class="table-wrap"><table class="asset-table"><thead><tr><th>SQL 名称 / 用途</th><th>涉及表</th><th>项目</th><th>标签</th><th>版本</th><th>最近更新</th><th>复用</th></tr></thead><tbody id="assetRows">
+          <tr class="selected" data-name="采购付款异常明细" data-open-detail><td><div class="asset-name">采购付款异常明细</div><div class="asset-purpose">识别同合同拆分付款、超比例付款与付款节点异常</div></td><td><code class="inline">dwd_pay_order +3</code></td><td>采购异常监测</td><td><span class="tag">采购</span><span class="tag">付款</span></td><td>v3.2</td><td>今天 09:18</td><td class="uses">28</td></tr>
+          <tr data-name="固定资产处置审批链" data-open-detail><td><div class="asset-name">固定资产处置审批链</div><div class="asset-purpose">还原处置申请至财务核销的完整审批节点</div></td><td><code class="inline">ods_asset_flow +2</code></td><td>资产审计</td><td><span class="tag">固定资产</span></td><td>v2.4</td><td>10.18</td><td class="uses">19</td></tr>
+          <tr data-name="供应商关联交易识别" data-open-detail><td><div class="asset-name">供应商关联交易识别</div><div class="asset-purpose">按账户、地址与联系人识别潜在关联供应商</div></td><td><code class="inline">dim_vendor +4</code></td><td>供应商画像</td><td><span class="tag">供应商</span></td><td>v4.1</td><td>10.16</td><td class="uses">41</td></tr>
+          <tr data-name="模型结果汇总" data-open-detail><td><div class="asset-name">模型结果汇总</div><div class="asset-purpose">归并各监测模型批次结果与处置反馈</div></td><td><code class="inline">ads_audit_result +5</code></td><td>模型运营</td><td><span class="tag">汇总</span></td><td>v1.9</td><td>10.15</td><td class="uses">36</td></tr>
+          <tr data-name="采购订单重复行检测" data-open-detail><td><div class="asset-name">采购订单重复行检测</div><div class="asset-purpose">对同日同供应商同金额的订单行进行窗口去重</div></td><td><code class="inline">dwd_po_line</code></td><td>采购异常监测</td><td><span class="tag">采购</span></td><td>v1.3</td><td>10.12</td><td class="uses">14</td></tr>
+          <tr data-name="合同付款节点偏离" data-open-detail><td><div class="asset-name">合同付款节点偏离</div><div class="asset-purpose">比较合同约定节点与实际付款时间及比例</div></td><td><code class="inline">dwd_contract +2</code></td><td>合同审计</td><td><span class="tag">合同</span></td><td>v2.0</td><td>10.09</td><td class="uses">22</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="view" id="sql-detail">
+        <div class="crumbs"><strong>SQL 查询库</strong><span class="slash">/</span><span>采购付款异常明细</span></div>
+        <div class="studio">
+          <div class="workbench">
+            <div class="editor-head"><div class="editor-title"><span class="file-sign">SQL</span><div><h1>采购付款异常明细</h1><p>正式资产 · 最后验证于 2026-10-20 09:18</p></div></div><div class="editor-actions"><select id="sqlVersion" class="version-select" aria-label="SQL 版本"><option>v3.2 当前</option><option>v3.1</option><option>v3.0</option></select><button id="copySql" class="btn small"><svg class="icon" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11"/><path d="M16 8V5H5v11h3"/></svg>复制 SQL</button></div></div>
+            <div class="code-pane"><div class="code-toolbar"><span>purchase_payment_exception.sql</span><span>只读 · 42 行 · UTF-8</span></div><pre id="sqlCode"><code><span class="line"><span class="cm">-- 用途：识别采购付款中的拆分、超比例与节点异常</span></span><span class="line"><span class="kw">WITH</span> payment_base <span class="kw">AS</span> (</span><span class="line">  <span class="kw">SELECT</span></span><span class="line">    p.<span class="field">payment_id</span>, p.<span class="field">contract_id</span>,</span><span class="line">    p.<span class="field">vendor_id</span>, p.<span class="field">payment_date</span>,</span><span class="line">    p.<span class="field">payment_amount</span>, c.<span class="field">contract_amount</span>,</span><span class="line">    <span class="fn">SUM</span>(p.<span class="field">payment_amount</span>) <span class="kw">OVER</span> (</span><span class="line">      <span class="kw">PARTITION BY</span> p.<span class="field">contract_id</span></span><span class="line">      <span class="kw">ORDER BY</span> p.<span class="field">payment_date</span></span><span class="line">    ) <span class="kw">AS</span> <span class="field">cumulative_paid</span></span><span class="line">  <span class="kw">FROM</span> <span class="field">dwd_pay_order</span> p</span><span class="line">  <span class="kw">JOIN</span> <span class="field">dwd_contract</span> c</span><span class="line">    <span class="kw">ON</span> p.<span class="field">contract_id</span> = c.<span class="field">contract_id</span></span><span class="line">  <span class="kw">WHERE</span> p.<span class="field">payment_date</span> <span class="kw">BETWEEN</span> <span class="param">:start_date</span></span><span class="line">    <span class="kw">AND</span> <span class="param">:end_date</span></span><span class="line">), exception_flag <span class="kw">AS</span> (</span><span class="line">  <span class="kw">SELECT</span> *,</span><span class="line">    <span class="kw">CASE WHEN</span> cumulative_paid &gt; contract_amount * <span class="num">1.02</span></span><span class="line">      <span class="kw">THEN</span> <span class="str">'超合同金额'</span></span><span class="line">      <span class="kw">WHEN</span> payment_amount &lt; <span class="param">:split_threshold</span></span><span class="line">      <span class="kw">THEN</span> <span class="str">'疑似拆分付款'</span></span><span class="line">    <span class="kw">END AS</span> <span class="field">risk_type</span></span><span class="line">  <span class="kw">FROM</span> payment_base</span><span class="line">)</span><span class="line"><span class="kw">SELECT</span> * <span class="kw">FROM</span> exception_flag</span><span class="line"><span class="kw">WHERE</span> risk_type <span class="kw">IS NOT NULL</span>;</span></code></pre></div>
+            <div class="result-panel"><div class="tabs"><button class="tab active">样例结果</button><button class="tab">运行记录</button><button class="tab">字段说明</button></div><table class="result-table"><thead><tr><th>payment_id</th><th>contract_id</th><th>vendor_id</th><th>payment_amount</th><th>risk_type</th></tr></thead><tbody><tr><td>PAY-EX-001</td><td>CT-2026-014</td><td>V-0217</td><td>428,000.00</td><td class="bad">超合同金额</td></tr><tr><td>PAY-EX-002</td><td>CT-2026-038</td><td>V-0084</td><td>49,800.00</td><td class="bad">疑似拆分付款</td></tr></tbody></table></div>
+          </div>
+          <aside class="inspector">
+            <div class="inspector-title">资产信息</div>
+            <div class="inspect-section"><div class="inspect-label">用途说明</div><p class="inspect-copy">定位采购合同付款中累计金额越界或接近审批阈值的拆分记录，为样本复核提供候选清单。</p></div>
+            <div class="inspect-section"><div class="inspect-label">AI 逻辑摘要 · 非正式字段</div><div class="ai-note"><b>AI GENERATED · 需人工复核</b>先聚合同一合同的累计付款，再按 102% 容差与拆分阈值标记风险。摘要不参与 SQL 执行。</div></div>
+            <div class="inspect-section"><div class="inspect-label">参数与对象</div><div class="kv"><span>start_date</span><span>DATE · 必填</span></div><div class="kv"><span>end_date</span><span>DATE · 必填</span></div><div class="kv"><span>split_threshold</span><span>DECIMAL · 50000</span></div><div class="kv"><span>涉及表</span><span>dwd_pay_order<br>dwd_contract<br>dim_vendor</span></div></div>
+            <div class="inspect-section"><div class="inspect-label">版本记录</div><div class="version-row"><span class="ver">v3.2</span><div><b>调整累计付款容差</b><p>今天 09:18 · 已验证</p></div></div><div class="version-row"><span class="ver">v3.1</span><div><b>新增拆分付款标记</b><p>10.12 · 已归档</p></div></div><div class="version-row"><span class="ver">v3.0</span><div><b>统一合同主键</b><p>09.28 · 已归档</p></div></div></div>
+            <div class="inspect-section"><div class="inspect-label">关联与注意事项</div><p class="inspect-copy">关联请求：采购付款明细<br>注意：月底结账期间存在跨日入账，应在样本复核时结合凭证日期。</p></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="model">
+        <div class="crumbs"><strong>监测模型</strong><span class="slash">/</span><span>采购异常监测模型</span></div>
+        <div class="model-head"><div class="model-title-wrap"><span class="model-glyph"><svg class="icon" viewBox="0 0 24 24"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="12" cy="19" r="2"/><path d="M7 6.5l4 10M17 6.5l-4 10M7 5h10"/></svg></span><div><h1 class="page-title">采购异常监测模型</h1><div class="model-meta"><span>当前版本 v4.3</span><span>每周一 06:30</span><span>最近命中 27 条</span></div></div></div><span class="status ok">运行正常</span></div>
+        <div class="model-tabs"><button class="model-tab active" data-panel="overview">概览</button><button class="model-tab" data-panel="dependencies">依赖</button><button class="model-tab" data-panel="steps">更新步骤</button><button class="model-tab" data-panel="versions">版本记录</button></div>
+        <div class="model-body">
+          <div class="model-panel active" id="overview"><div class="two-col"><div><div class="block"><h3>模型规则</h3><div class="rule"><span class="op">IF</span> 累计付款金额 &gt; 合同金额 × <span class="val">102%</span><br><span class="op">OR</span> 同供应商同日付款笔数 ≥ <span class="val">3</span> 且单笔金额 &lt; <span class="val">50,000</span><br><span class="op">THEN</span> 输出采购付款异常候选记录</div></div><div class="block"><h3>最近运行</h3><div class="run-row"><span>2026-10-19</span><div class="mini-bar"><i style="width:68%"></i></div><strong>27 命中</strong><span class="status ok">成功</span></div><div class="run-row"><span>2026-10-12</span><div class="mini-bar"><i style="width:52%"></i></div><strong>21 命中</strong><span class="status ok">成功</span></div><div class="run-row"><span>2026-10-05</span><div class="mini-bar"><i style="width:78%"></i></div><strong>31 命中</strong><span class="status ok">成功</span></div></div></div><aside><div class="block"><h3>运行配置</h3><div class="kv"><span>状态</span><span>ACTIVE</span></div><div class="kv"><span>频率</span><span>0 30 6 ? * MON</span></div><div class="kv"><span>结果表</span><span>ads_audit_purchase_risk</span></div><div class="kv"><span>保留期</span><span>365 DAYS</span></div></div><div class="block"><h3>关联 SQL</h3><div class="dependency"><i class="line-dot"></i><span>输入明细</span><code>采购付款异常明细 v3.2</code></div><div class="dependency"><i class="line-dot"></i><span>结果汇总</span><code>模型结果汇总 v1.9</code></div></div></aside></div></div>
+          <div class="model-panel" id="dependencies"><div class="block"><h3>依赖对象与流向</h3><div class="dependency"><i class="line-dot"></i><span>源表</span><code>dwd_pay_order · 每日 05:40 就绪</code></div><div class="dependency"><i class="line-dot"></i><span>源表</span><code>dwd_contract · 每日 05:20 就绪</code></div><div class="dependency"><i class="line-dot"></i><span>维表</span><code>dim_vendor · 每日 04:55 就绪</code></div><div class="dependency"><i class="line-dot"></i><span>存储过程</span><code>sp_audit_purchase_risk v4.3</code></div><div class="dependency"><i class="line-dot"></i><span>结果表</span><code>ads_audit_purchase_risk</code></div></div></div>
+          <div class="model-panel" id="steps"><div class="block"><h3>模型更新清单</h3><label class="check-step"><input type="checkbox"><span><b>更新前检查</b><p>核对上游表更新时间、当前命中基线和最近一次成功批次。</p></span><span class="step-state">未完成</span></label><label class="check-step"><input type="checkbox"><span><b>修改</b><p>在测试版本调整规则、参数或存储过程，并记录变更目的。</p></span><span class="step-state">未完成</span></label><label class="check-step"><input type="checkbox"><span><b>发布</b><p>提交正式版本，更新版本号与执行调度。</p></span><span class="step-state">未完成</span></label><label class="check-step"><input type="checkbox"><span><b>验证</b><p>对比新旧版本命中差异，抽查边界样本并保存结果。</p></span><span class="step-state">未完成</span></label><label class="check-step"><input type="checkbox"><span><b>回滚准备</b><p>保留上一正式版本、参数快照和结果表恢复路径。</p></span><span class="step-state">未完成</span></label></div></div>
+          <div class="model-panel" id="versions"><div class="block"><h3>版本记录</h3><div class="version-log"><code>v4.3</code><time>2026-10-18</time><span>调整付款比例容差，补充拆分付款识别条件</span></div><div class="version-log"><code>v4.2</code><time>2026-09-27</time><span>结果表新增规则来源与样本复核状态</span></div><div class="version-log"><code>v4.1</code><time>2026-08-12</time><span>供应商主数据切换至统一维表</span></div><div class="version-log"><code>v4.0</code><time>2026-07-01</time><span>合并采购付款与合同节点两类规则</span></div></div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="searchPop" class="search-pop"><div class="search-tip">输入关键词，或选择最近访问</div><div class="search-hit" data-view-jump="sql-detail">采购付款异常明细 <code>SQL · v3.2</code></div><div class="search-hit" data-view-jump="model">采购异常监测模型 <code>MODEL · v4.3</code></div><div class="search-hit" data-view-jump="library">供应商关联交易识别 <code>SQL · v4.1</code></div></div>
+<div id="toast" class="toast" role="status">已复制 SQL 到剪贴板</div>
+
+<script>
+  const views=[...document.querySelectorAll('.view')];
+  const navs=[...document.querySelectorAll('.nav-btn')];
+  function showView(id){
+    views.forEach(v=>v.classList.toggle('active',v.id===id));
+    navs.forEach(n=>n.classList.toggle('active',n.dataset.view===id));
+    document.querySelector('main').scrollTop=0;
+  }
+  navs.forEach(n=>n.addEventListener('click',()=>showView(n.dataset.view)));
+  document.querySelectorAll('[data-open-detail]').forEach(el=>el.addEventListener('click',()=>showView('sql-detail')));
+  document.querySelectorAll('[data-open-model]').forEach(el=>el.addEventListener('click',()=>showView('model')));
+
+  const globalSearch=document.getElementById('globalSearch');
+  const searchPop=document.getElementById('searchPop');
+  globalSearch.addEventListener('focus',()=>searchPop.classList.add('show'));
+  globalSearch.addEventListener('input',()=>searchPop.classList.add('show'));
+  document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap')&&!e.target.closest('.search-pop'))searchPop.classList.remove('show')});
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();globalSearch.focus()}if(e.key==='Escape'){searchPop.classList.remove('show');globalSearch.blur()}});
+  document.querySelectorAll('[data-view-jump]').forEach(el=>el.addEventListener('click',()=>{showView(el.dataset.viewJump);searchPop.classList.remove('show');globalSearch.value=''}));
+
+  const assetFilter=document.getElementById('assetFilter');
+  assetFilter.addEventListener('input',()=>{const q=assetFilter.value.trim().toLowerCase();document.querySelectorAll('#assetRows tr').forEach(r=>r.style.display=r.innerText.toLowerCase().includes(q)?'':'none')});
+  document.querySelectorAll('#assetRows tr').forEach(row=>row.addEventListener('click',()=>{document.querySelectorAll('#assetRows tr').forEach(r=>r.classList.remove('selected'));row.classList.add('selected')}));
+
+  const toast=document.getElementById('toast');
+  function notify(msg){toast.textContent=msg;toast.classList.add('show');clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>toast.classList.remove('show'),1800)}
+  document.getElementById('copySql').addEventListener('click',async()=>{const text=document.getElementById('sqlCode').innerText;try{await navigator.clipboard.writeText(text)}catch(e){}notify('已复制 SQL 到剪贴板')});
+  document.getElementById('sqlVersion').addEventListener('change',e=>notify('已切换到 '+e.target.value+'（只读版本）'));
+
+  document.querySelectorAll('.task-check').forEach(c=>c.addEventListener('change',()=>{const n=document.querySelectorAll('.task-check:checked').length;document.getElementById('taskCount').textContent=n+' / 5 完成'}));
+  document.querySelectorAll('.model-tab').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('.model-tab').forEach(t=>t.classList.toggle('active',t===tab));document.querySelectorAll('.model-panel').forEach(p=>p.classList.toggle('active',p.id===tab.dataset.panel))}));
+  document.querySelectorAll('.check-step input').forEach(c=>c.addEventListener('change',()=>{c.closest('.check-step').querySelector('.step-state').textContent=c.checked?'已完成':'未完成'}));
+</script>
+</body>
+</html>

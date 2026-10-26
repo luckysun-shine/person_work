@@ -1,0 +1,41 @@
+{
+  "version": "0.8.0",
+  "entities": {
+    "task": {
+      "fields": ["id", "title", "status", "priority", "plannedDate", "dueAt", "type", "relatedEntityType", "relatedEntityId", "notes", "createdAt", "updatedAt"]
+    },
+    "dataRequest": {
+      "fields": ["id", "title", "requester", "purpose", "scope", "caliberNotes", "dueAt", "status", "deliveryRecord", "relatedSqlIds", "relatedProjectId", "createdAt", "updatedAt"]
+    },
+    "sqlAsset": {
+      "fields": ["id", "name", "purpose", "databaseType", "sqlText", "parameters", "tableNames", "tags", "status", "currentVersion", "validationNote", "relatedRequestIds", "relatedModelIds", "reuseCount", "createdAt", "updatedAt"]
+    },
+    "sqlVersion": {
+      "fields": ["id", "sqlAssetId", "version", "sqlText", "changeSummary", "validationStatus", "createdAt"]
+    },
+    "monitoringModel": {
+      "fields": ["id", "name", "purpose", "status", "schedule", "currentVersion", "ruleDefinitions", "dependencyIds", "relatedSqlIds", "lastRunAt", "nextRunAt", "createdAt", "updatedAt"]
+    },
+    "modelRun": {
+      "fields": ["id", "modelId", "startedAt", "finishedAt", "status", "scannedCount", "hitCount", "reviewedCount", "resultSummary"]
+    },
+    "modelChange": {
+      "fields": ["id", "modelId", "version", "changeReason", "precheck", "publishSteps", "validationResult", "rollbackPlan", "createdAt"]
+    },
+    "project": {
+      "fields": ["id", "name", "type", "goal", "status", "progress", "startDate", "dueDate", "nextAction", "relatedTaskIds", "relatedAssetIds", "createdAt", "updatedAt"]
+    },
+    "workNote": {
+      "fields": ["id", "type", "title", "content", "tags", "relatedEntityType", "relatedEntityId", "createdAt", "updatedAt"]
+    },
+    "weekReview": {
+      "fields": ["id", "weekStart", "accomplishments", "blockers", "nextWeekFocus", "energyScore", "createdAt", "updatedAt"]
+    },
+    "weeklyReport": {
+      "fields": ["id", "weekStart", "title", "executiveSummary", "highlights", "risks", "nextWeekPlan", "metrics", "sourceSnapshot", "createdAt", "updatedAt"]
+    },
+    "navigationItem": {
+      "fields": ["id", "name", "url", "category", "description", "iconKey", "sortOrder", "lastVisitedAt"]
+    }
+  }
+}

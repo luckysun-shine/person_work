@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+data/
+.tmp/
+.git/
+tests/
+*.db
+*.db-wal
+*.db-shm
+preview-*.png
+prototype-*

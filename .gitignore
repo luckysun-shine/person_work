@@ -1,0 +1,23 @@
+.agents/
+skills-lock.json
+
+# Local runtimes and caches
+**/venv/
+**/__pycache__/
+**/*.pyc
+audit-ai-workbench-ui/workbench-v2/tmpkvbcatzk/
+
+# Local databases and backups
+**/data/*.db
+**/data/*.db-shm
+**/data/*.db-wal
+**/data/backups/
+**/data/.workbench_secret
+**/.env
+**/.env.*
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

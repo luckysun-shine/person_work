@@ -1,0 +1,16 @@
+services:
+  workbench:
+    build: .
+    ports:
+      - "${WORKBENCH_PORT:-8765}:8765"
+    environment:
+      WORKBENCH_DATA_DIR: /data
+      WORKBENCH_SECRET: ${WORKBENCH_SECRET:-change-me-in-production}
+      WORKBENCH_HOST: 0.0.0.0
+      WORKBENCH_PORT: "8765"
+    volumes:
+      - workbench-data:/data
+    restart: unless-stopped
+
+volumes:
+  workbench-data:

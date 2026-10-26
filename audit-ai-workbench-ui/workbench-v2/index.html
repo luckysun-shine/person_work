@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>数智审监工作台</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%230b63f6'/%3E%3Cstop offset='1' stop-color='%231d3a8a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='36' height='36' rx='9' fill='url(%23g)'/%3E%3Cpath d='M18 6.5 27.5 10.2v7.2c0 6.1-4 10.6-9.5 12.4-5.5-1.8-9.5-6.3-9.5-12.4v-7.2L18 6.5Z' fill='none' stroke='%23fff' stroke-width='1.9' stroke-linejoin='round'/%3E%3Cpath d='M13.5 20.5v-4m4.5 4v-7m4.5 7v-2.5' stroke='%237dd3fc' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='22.5' cy='13.5' r='1.7' fill='%23fbbf24'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css?v=1.0.0">
+  <link rel="stylesheet" href="ui-apple-hig.css?v=1.9.10">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg class="brand-logo" viewBox="0 0 36 36" fill="none">
+            <path class="logo-shield" d="M18 5.8 28.2 9.8v7.6c0 6.5-4.3 11.4-10.2 13.3C12.1 28.8 7.8 23.9 7.8 17.4V9.8L18 5.8Z"/>
+            <path class="logo-bars" d="M13.2 21.2v-4.2M18 21.2v-7.6M22.8 21.2v-3"/>
+            <path class="logo-Nodes" d="M13.2 17 18 13.6 22.8 15.2"/>
+            <circle class="logo-spark" cx="22.8" cy="13.2" r="1.9"/>
+          </svg>
+        </div>
+        <div class="brand-copy"><strong>数智审监工作台</strong><small>个人数据分析空间</small></div>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <p class="nav-label">工作</p>
+        <button class="nav-item active" data-view="today"><svg><use href="#i-home"/></svg><span>今日</span><b id="navTodayCount">0</b></button>
+        <button class="nav-item" data-view="week"><svg><use href="#i-calendar"/></svg><span>本周计划</span></button>
+        <button class="nav-item" data-view="reports"><svg><use href="#i-chart"/></svg><span>报告助手</span></button>
+        <button class="nav-item" data-view="stats"><svg><use href="#i-chart"/></svg><span>统计复盘</span></button>
+
+        <p class="nav-label">资产</p>
+        <button class="nav-item" data-view="requests"><svg><use href="#i-inbox"/></svg><span>数据请求</span><b>3</b></button>
+        <button class="nav-item" data-view="sql"><svg><use href="#i-code"/></svg><span>SQL 资产</span></button>
+        <button class="nav-item" data-view="procedures"><svg><use href="#i-database"/></svg><span>存储过程</span></button>
+        <button class="nav-item" data-view="models"><svg><use href="#i-model"/></svg><span>监测模型</span><b class="risk">2</b></button>
+        <button class="nav-item" data-view="projects"><svg><use href="#i-project"/></svg><span>项目与报告</span></button>
+
+        <p class="nav-label">知识</p>
+        <button class="nav-item" data-view="notes"><svg><use href="#i-note"/></svg><span>工作记录</span></button>
+        <button class="nav-item" data-view="search"><svg><use href="#i-search"/></svg><span>统一检索</span></button>
+        <button class="nav-item" data-view="links"><svg><use href="#i-link"/></svg><span>常用导航</span></button>
+
+        <p class="nav-label">系统</p>
+        <button class="nav-item" data-view="data"><svg><use href="#i-database"/></svg><span>数据管理</span></button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <span class="health-dot"></span>
+        <div><strong>本地工作区正常</strong><small>今天 09:42 已同步</small></div>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="topbar-leading">
+          <button class="icon-button menu-button" id="menuButton" aria-label="切换侧栏"><svg><use href="#i-menu"/></svg></button>
+          <strong class="workspace-title" id="workspaceTitle">今日</strong>
+        </div>
+        <button class="global-search" id="searchButton">
+          <svg><use href="#i-search"/></svg>
+          <span>搜索任务、SQL、模型、记录…</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <div class="top-actions">
+          <span class="today-label">2026年10月20日 · 周二</span>
+          <button class="ai-status-chip" type="button" id="aiStatusChip" title="查看 AI 能力与配置">
+            <i class="ai-status-dot" aria-hidden="true"></i>
+            <span id="aiStatusChipLabel">AI 未配置</span>
+          </button>
+          <button class="icon-button appearance-button" id="appearanceButton" aria-label="切换外观" title="切换浅色或深色外观">◐</button>
+          <button class="avatar-button" aria-label="个人设置">分</button>
+          <button class="primary-button" id="quickCreate"><svg><use href="#i-plus"/></svg>快速记录</button>
+        </div>
+      </header>
+
+      <main class="main">
+        <section class="view active" id="view-today" data-title="今日">
+          <header class="today-head">
+            <div class="today-head-copy">
+              <p class="eyebrow" id="todayEyebrow">今天</p>
+              <h1 id="todayHeadline">今日焦点</h1>
+              <p id="todayLead">正在汇总今天与逾期任务…</p>
+            </div>
+            <div class="today-head-side">
+              <div class="today-progress-chip" aria-label="今日进度">
+                <span>今日进度</span>
+                <strong id="todayProgress">0 / 0</strong>
+                <div class="progress"><i id="todayProgressBar" style="width:0%"></i></div>
+              </div>
+              <div class="today-head-actions">
+                <button class="secondary-button" type="button" id="todayGotoWeek">本周计划</button>
+                <button class="primary-button" type="button" id="todayNewTask"><svg><use href="#i-plus"/></svg>新建任务</button>
+              </div>
+            </div>
+          </header>
+
+          <section class="today-nudge-panel" id="todayNudgeBar" hidden>
+            <div class="today-nudge-head">
+              <span class="signal risk-signal" id="todayAttentionSignal"></span>
+              <div>
+                <strong id="todayAttentionCount">需要催办</strong>
+                <p id="todayAttentionText">逾期、提醒与临近截止会集中在这里。</p>
+              </div>
+              <div class="today-nudge-tools">
+                <button type="button" class="text-button" id="refreshNudgesButton">刷新</button>
+                <button type="button" class="text-button" id="enableNotifyButton">桌面提醒</button>
+              </div>
+            </div>
+            <div class="nudge-list" id="todayNudgeList"></div>
+          </section>
+
+          <section class="ai-capability-panel ai-capability-compact" id="aiCapabilityPanel">
+            <div class="ai-capability-head">
+              <div>
+                <p class="eyebrow">AI ASSISTANT</p>
+                <strong id="aiCapabilityTitle">AI 能力</strong>
+                <p id="aiCapabilityLead">配置后可用于周报润色、记录整理与 SQL 说明；未配置时使用本地规则。</p>
+              </div>
+              <button class="secondary-button" type="button" id="aiCapabilityConfig">去配置</button>
+            </div>
+            <div class="ai-capability-grid">
+              <button type="button" class="ai-capability-card" data-ai-jump="reports">
+                <strong>周报润色</strong>
+                <small>报告助手一键润色</small>
+              </button>
+              <button type="button" class="ai-capability-card" data-ai-jump="notes">
+                <strong>记录整理</strong>
+                <small>智能整理工作记录</small>
+              </button>
+              <button type="button" class="ai-capability-card" data-ai-jump="sql">
+                <strong>SQL 说明</strong>
+                <small>生成用途与表说明</small>
+              </button>
+            </div>
+          </section>
+
+          <div class="today-board" id="homeDashboard" data-layout-edit="off">
+            <section class="panel home-card today-card-tasks" data-home-card="tasks">
+              <div class="panel-head">
+                <div><span class="drag-handle" aria-hidden="true" hidden>⋮⋮</span><h2>今日待办</h2><p id="todayTasksHint">按优先级处理，勾选即可完成</p></div>
+                <button class="text-button" type="button" id="todayTasksToWeek">周计划 →</button>
+              </div>
+              <div class="task-list" id="todayTasks"><p class="empty-state">正在加载今日任务…</p></div>
+            </section>
+
+            <div class="today-rail">
+              <aside class="panel home-card today-card-projects" data-home-card="projects">
+                <div class="panel-head">
+                  <div><span class="drag-handle" aria-hidden="true" hidden>⋮⋮</span><h2>正在推进</h2><p>本周重点项目</p></div>
+                  <button class="text-button" type="button" data-view-jump="projects">全部 →</button>
+                </div>
+                <div id="todayProjects"></div>
+              </aside>
+
+              <aside class="panel home-card today-card-quick" data-home-card="quick">
+                <div class="panel-head">
+                  <div><span class="drag-handle" aria-hidden="true" hidden>⋮⋮</span><h2>今日日程</h2><p>钉钉 / ICS</p></div>
+                  <button class="text-button" type="button" id="refreshCalendarToday">刷新</button>
+                </div>
+                <div id="todayCalendarEvents" class="history-list today-calendar-list"><p class="empty-state">暂无日程</p></div>
+                <div class="today-quick-divider"><span>快速进入</span></div>
+                <div class="quick-links" id="todayQuickLinks">
+                  <button data-view-jump="sql" type="button"><svg><use href="#i-code"/></svg><span><strong>SQL 资产</strong><small>查询库</small></span><b>→</b></button>
+                  <button data-view-jump="models" type="button"><svg><use href="#i-model"/></svg><span><strong>监测模型</strong><small>运行与规则</small></span><b>→</b></button>
+                </div>
+              </aside>
+            </div>
+
+            <section class="panel home-card today-card-requests" data-home-card="requests">
+              <div class="panel-head">
+                <div><span class="drag-handle" aria-hidden="true" hidden>⋮⋮</span><h2>最近数据请求</h2><p>进行中的取数与交付</p></div>
+                <button class="text-button" type="button" data-view-jump="requests" id="todayRequestsJump">查看全部 →</button>
+              </div>
+              <div class="compact-table today-request-table">
+                <div class="table-head"><span>请求</span><span>提出时间</span><span>下一步</span><span>状态</span></div>
+                <div id="todayRequestRows"><p class="empty-state">正在加载数据请求…</p></div>
+              </div>
+            </section>
+          </div>
+
+          <footer class="today-layout-bar">
+            <button class="text-button" type="button" id="toggleHomeEdit">调整布局</button>
+            <button class="text-button" type="button" id="resetHomeLayout" hidden>恢复默认</button>
+            <span class="today-layout-hint" id="homeEditHint">日常使用保持固定版式；需要时再调整卡片顺序。</span>
+          </footer>
+        </section>
+
+        <section class="view" id="view-search" data-title="统一检索">
+          <div class="page-head"><div><p class="eyebrow">GLOBAL SEARCH</p><h1>统一检索</h1><p>跨任务、请求、SQL、存储过程、模型、项目、报告和工作记录查找信息。支持方向键选择、Enter 打开。</p></div><button class="secondary-button" id="saveSearchButton" type="button">保存当前检索</button></div>
+          <section class="search-workspace panel">
+            <form class="search-hero" id="globalSearchForm"><svg><use href="#i-search"/></svg><input id="globalSearchInput" placeholder="输入编号、标题、标签、SQL 表名或正文关键词" autocomplete="off"><button class="primary-button" type="submit">搜索</button></form>
+            <div class="search-meta-grid">
+              <div class="search-chip-panel"><div class="panel-head compact"><div><h2>最近搜索</h2></div><button class="text-button" id="clearRecentSearches" type="button">清空</button></div><div id="recentSearchList" class="chip-list"><p class="empty-state">暂无最近搜索</p></div></div>
+              <div class="search-chip-panel"><div class="panel-head compact"><div><h2>已保存条件</h2></div></div><div id="savedSearchList" class="chip-list"><p class="empty-state">暂无保存的检索</p></div></div>
+            </div>
+            <div class="search-toolbar"><div class="filter-tabs" id="globalSearchFilters"><button class="active" type="button" data-search-type="all">全部</button><button type="button" data-search-type="task">任务</button><button type="button" data-search-type="data_request">请求</button><button type="button" data-search-type="sql_asset">SQL</button><button type="button" data-search-type="procedure">存储过程</button><button type="button" data-search-type="model">模型</button><button type="button" data-search-type="project">项目</button><button type="button" data-search-type="generated_report">报告</button><button type="button" data-search-type="note">记录</button></div><span id="globalSearchSummary">输入关键词开始检索</span></div>
+            <div class="unified-results" id="globalSearchResults" tabindex="0"><p class="empty-state">支持按业务编号、标题、说明、标签和 SQL 内容检索。可用 ↑↓ 选择结果，Enter 打开。</p></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-week" data-title="本周计划">
+          <div class="page-head"><div><p class="eyebrow">计划与执行</p><h1>本周计划</h1><p>让任务和项目交付保持在同一时间线上。</p></div><div class="segmented"><button class="active" data-week="current">本周</button><button data-week="next">下周</button><button data-week="later">以后</button><button data-week="done">已完成</button></div></div>
+          <div class="week-toolbar"><div><strong id="weekRange">正在读取本周日期…</strong><span id="weekSummary">正在加载计划</span></div><div class="batch-actions"><button class="secondary-button" id="copyWeekButton">复制未完成到下周</button><button class="secondary-button" id="addTaskButton"><svg><use href="#i-plus"/></svg>添加任务</button></div></div>
+          <div class="week-board" id="weekBoard" aria-live="polite"></div>
+          <form class="week-review panel" id="weekReviewForm">
+            <div class="panel-head"><div><h2>本周复盘</h2><p id="weekReviewHint">记录成果、阻塞和下周重点</p></div><label>本周状态<select id="reviewEnergy"><option value="1">1 · 需要调整</option><option value="2">2 · 偏低</option><option value="3" selected>3 · 稳定</option><option value="4">4 · 良好</option><option value="5">5 · 高效</option></select></label></div>
+            <div class="review-grid"><label>完成与进展<textarea id="reviewAccomplishments" rows="4" placeholder="本周完成了什么，形成了哪些可复用成果？"></textarea></label><label>阻塞与风险<textarea id="reviewBlockers" rows="4" placeholder="哪些事项受阻，原因和处理计划是什么？"></textarea></label><label>下周重点<textarea id="reviewNextFocus" rows="4" placeholder="下周最重要的三个目标"></textarea></label></div>
+            <footer><span id="weekReviewSaved">尚未保存</span><button class="primary-button" type="submit">保存复盘</button></footer>
+          </form>
+        </section>
+
+        <section class="view" id="view-reports" data-title="报告助手">
+          <div class="page-head report-page-head"><div><p class="eyebrow">AI REPORT ASSISTANT</p><h1>工作总结与报告助手</h1><p>通过周报、项目、模型和专项检查模板生成可编辑、可追溯的报告。</p></div><div class="report-actions"><label>报告模板<select id="reportTemplate"></select></label><button class="secondary-button" type="button" id="manageReportTemplatesButton">管理模板</button><label>开始日期<input id="reportWeekStart" type="date"></label><label id="reportEndLabel" hidden>结束日期<input id="reportEndDate" type="date"></label><label id="reportEntityLabel" hidden>关联对象<select id="reportRelatedEntity"></select></label><button class="secondary-button" id="generateReportButton"><svg><use href="#i-model"/></svg>重新生成</button><button class="secondary-button" type="button" id="polishReportButton">一键润色</button><button class="secondary-button" id="finalizeReportButton">定稿</button><button class="primary-button" id="saveReportButton"><svg><use href="#i-note"/></svg>保存报告</button></div></div>
+          <div class="report-source-note"><span class="signal ok-signal" id="reportAiSignal"></span><div><strong id="reportAiModeLabel">本地智能汇总</strong><p id="reportSourceStatus">正在读取任务、请求、模型、项目和工作记录…</p></div><span id="reportSaveStatus">尚未保存</span></div>
+          <section class="panel report-version-panel"><div class="panel-head"><div><h2>版本历史</h2><p>每次保存与定稿都会生成可追溯快照</p></div></div><div id="reportVersionHistory" class="history-list"><p class="empty-state">保存报告后将显示版本历史</p></div></section>
+          <div class="report-metrics" id="reportMetrics"><div><strong>—</strong><span>任务完成</span></div><div><strong>—</strong><span>请求交付</span></div><div><strong>—</strong><span>模型运行</span></div><div><strong>—</strong><span>活跃项目</span></div><div><strong>—</strong><span>风险事项</span></div></div>
+          <form class="report-editor" id="weeklyReportForm">
+            <section class="panel report-summary-card"><div class="panel-head"><div><h2>报告标题与总体概览</h2><p>用于周报开头的管理摘要</p></div></div><div class="report-field-stack"><label>报告标题<input id="reportTitle" maxlength="200"></label><label>总体概览<textarea id="reportExecutiveSummary" rows="4"></textarea></label></div></section>
+            <div class="report-section-grid">
+              <section class="panel report-section-card progress-card"><div class="panel-head"><div><h2>完成与进展</h2><p>自动提取任务、交付和模型运行成果</p></div></div><textarea id="reportHighlights" rows="13"></textarea></section>
+              <section class="panel report-section-card risk-card"><div class="panel-head"><div><h2>阻塞与风险</h2><p>聚合受阻任务、待确认请求和待复核结果</p></div></div><textarea id="reportRisks" rows="13"></textarea></section>
+              <section class="panel report-section-card next-card"><div class="panel-head"><div><h2>下周计划</h2><p>结合下周任务和项目下一步自动整理</p></div></div><textarea id="reportNextWeek" rows="13"></textarea></section>
+            </div>
+            <footer class="report-footer"><span>生成内容仅作为工作草稿，保存前请根据实际情况复核。</span><div><button class="secondary-button" type="button" id="copyReportButton">复制全文</button><button class="secondary-button" type="button" id="downloadReportButton">Markdown</button><button class="secondary-button" type="button" id="downloadReportDocxButton">Word</button><button class="secondary-button" type="button" id="downloadReportPdfButton">PDF</button></div></footer>
+          </form>
+          <section class="panel report-history-panel"><div class="panel-head"><div><h2>报告历史</h2><p>查看通过模板保存的报告草稿与定稿</p></div></div><div id="genericReportHistory" class="history-list"><p class="empty-state">暂无模板报告</p></div></section>
+        </section>
+
+        <section class="view" id="view-stats" data-title="统计复盘">
+          <div class="page-head"><div><p class="eyebrow">STATS</p><h1>统计复盘</h1><p>查看完成、延期、新增任务投入，以及数据请求交付情况；支持下钻到具体条目。</p></div><div class="segmented" id="statsPeriodTabs"><button class="active" data-period="week">本周</button><button data-period="month">本月</button><button data-period="quarter">本季</button></div></div>
+          <div class="summary-line" id="statsSummary"><div><strong id="statsCompleted">0</strong><span>已完成任务</span></div><div><strong id="statsOverdue">0</strong><span>逾期未完成</span></div><div><strong id="statsCreated">0</strong><span>期间新增</span></div><div><strong id="statsMinutes">0</strong><span>投入分钟</span></div><p>请求按时交付率 <strong id="statsOnTime">—</strong></p></div>
+          <div class="dashboard-grid">
+            <section class="panel"><div class="panel-head"><div><h2>任务类型投入</h2><p>基于完成任务的实际耗时</p></div></div><div id="statsTypeList" class="history-list"><p class="empty-state">暂无数据</p></div></section>
+            <section class="panel"><div class="panel-head"><div><h2>常见需求主题</h2><p>按用途/主题汇总</p></div></div><div id="statsThemeList" class="history-list"><p class="empty-state">暂无数据</p></div></section>
+            <section class="panel"><div class="panel-head"><div><h2>可下钻列表</h2><p id="statsDrillHint">选择类别查看明细</p></div><div class="segmented" id="statsDrillTabs"><button class="active" data-drill="completed">已完成</button><button data-drill="overdue">逾期</button><button data-drill="created">新增</button><button data-drill="requests">请求</button></div></div><div id="statsDrillList" class="history-list"><p class="empty-state">加载后显示明细</p></div></section>
+          </div>
+        </section>
+
+        <section class="view" id="view-requests" data-title="数据请求">
+          <div class="page-head"><div><p class="eyebrow">REQUEST INBOX</p><h1>数据请求</h1><p>记录需求口径、查询过程、交付结果和复用资产。</p></div><button class="primary-button" id="newRequestButton"><svg><use href="#i-plus"/></svg>新建请求</button></div>
+          <div class="summary-line"><div><strong>0</strong><span>全部请求</span></div><div><strong>0</strong><span>处理中</span></div><div><strong>0</strong><span>等待确认</span></div><div><strong>0</strong><span>本月已交付</span></div><p>平均交付用时 <strong id="requestAverageDays">—</strong></p></div>
+          <div class="list-toolbar request-filter-bar"><div class="filter-tabs" id="requestStatusFilters"><button class="active" data-status="all">全部</button><button data-status="pending">待处理</button><button data-status="waiting">待确认</button><button data-status="working">处理中</button><button data-status="done">已交付</button></div><div class="batch-actions"><button class="secondary-button" id="requestBatchDone" disabled>批量完成</button><button class="secondary-button danger-button" id="requestBatchDelete" disabled>删除所选</button><div class="inline-search"><svg><use href="#i-search"/></svg><input id="requestSearch" placeholder="搜索主题、用途或编号"></div></div></div>
+          <div class="form-grid request-advanced-filters"><label>需求人<input id="requestFilterRequester" placeholder="姓名"></label><label>部门<input id="requestFilterDepartment" placeholder="部门"></label><label>开始日期<input id="requestFilterFrom" type="date"></label><label>结束日期<input id="requestFilterTo" type="date"></label><div class="batch-actions"><button class="secondary-button" id="requestFilterApply" type="button">组合筛选</button><button class="text-button" id="requestFilterReset" type="button">重置</button></div></div>
+          <div class="data-list request-list">
+            <div class="data-list-head"><span></span><span>请求主题</span><span>用途 / 项目</span><span>提出时间</span><span>下一步</span><span>状态</span></div>
+            <div id="requestRows"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-sql" data-title="SQL 资产">
+          <div class="page-head"><div><p class="eyebrow">QUERY LIBRARY</p><h1>SQL 资产</h1><p>把一次性取数沉淀成有口径、有版本、可复用的查询资产。</p></div><button class="primary-button" id="newSqlButton"><svg><use href="#i-plus"/></svg>新建 SQL</button></div>
+          <div class="asset-layout">
+            <aside class="asset-filters"><strong>分类</strong><div id="sqlCategoryFilters"></div><hr><strong>状态</strong><label><input class="sql-status-filter" value="validated" type="checkbox" checked> 已验证</label><label><input class="sql-status-filter" value="draft" type="checkbox" checked> 草稿</label><label><input class="sql-status-filter" value="archived" type="checkbox"> 已归档</label></aside>
+            <div class="asset-main">
+              <div class="list-toolbar"><div class="inline-search wide"><svg><use href="#i-search"/></svg><input id="sqlSearch" placeholder="搜索名称、表名、标签或用途"></div><div class="batch-actions"><button class="secondary-button" id="sqlBatchValidate" disabled>标记已验证</button><button class="secondary-button danger-button" id="sqlBatchDelete" disabled>删除所选</button></div></div>
+              <div class="sql-asset-board" id="sqlList">
+                <div id="sqlRows"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-procedures" data-title="存储过程">
+          <div class="page-head"><div><p class="eyebrow">PROCEDURE ASSETS</p><h1>存储过程与发布</h1><p>沉淀过程定义、版本、环境验证与可执行回滚方案。</p></div><button class="primary-button" id="newProcedureButton"><svg><use href="#i-plus"/></svg>新建存储过程</button></div>
+          <div class="summary-line" id="procedureSummary"><div><strong>0</strong><span>全部资产</span></div><div><strong>0</strong><span>生产启用</span></div><div><strong>0</strong><span>测试中</span></div><div><strong>0</strong><span>草稿</span></div></div>
+          <div class="list-toolbar"><div class="filter-tabs" id="procedureStatusFilters"><button class="active" data-status="all">全部</button><button data-status="active">生产启用</button><button data-status="testing">测试中</button><button data-status="draft">草稿</button><button data-status="archived">已归档</button></div><div class="inline-search"><svg><use href="#i-search"/></svg><input id="procedureSearch" placeholder="搜索过程名、数据库、用途或标签"></div></div>
+          <div class="data-list procedure-list"><div class="data-list-head"><span>过程名称</span><span>数据库 / Schema</span><span>版本</span><span>负责人</span><span>关联项目</span><span>状态</span></div><div id="procedureRows"></div></div>
+        </section>
+
+        <section class="view" id="view-models" data-title="监测模型">
+          <div class="page-head"><div><p class="eyebrow">MONITORING MODELS</p><h1>监测模型</h1><p>统一查看运行状态、规则版本、异常结果与维护步骤。</p></div><button class="primary-button" id="newModelButton"><svg><use href="#i-plus"/></svg>新建模型</button></div>
+          <div class="model-overview"><div><span class="signal ok-signal"></span><p><strong id="modelHealthSummary">0 / 0 模型运行正常</strong><small id="modelLastRun">尚无运行记录</small></p></div><div><strong id="modelHitSummary">0</strong><span>本次命中</span></div><div><strong id="modelPendingSummary">0</strong><span>待复核</span></div><div><strong id="modelUpdateSummary">0</strong><span>规则待更新</span></div></div>
+          <div class="model-grid" id="modelCards"></div>
+          <section class="panel model-detail">
+            <div class="model-detail-head"><div><p class="eyebrow" id="modelDetailCode">选择一个模型</p><h2 id="modelDetailName">监测模型详情</h2><p id="modelDetailPurpose">查看规则、依赖、版本与维护步骤。</p></div><div class="batch-actions"><button class="secondary-button" id="editModelButton">编辑模型</button><button class="secondary-button danger-button" id="deleteModelButton">删除</button><button class="secondary-button" id="newModelRunButton">记录一次运行</button></div></div>
+            <div class="model-tabs"><button class="active" data-model-tab="rules">核心规则</button><button data-model-tab="deps">依赖对象</button><button data-model-tab="runs">运行记录</button><button data-model-tab="steps">更新步骤</button><button data-model-tab="history">版本记录</button></div>
+            <div class="model-tab active" id="model-tab-rules"><div class="rule-list" id="modelRuleList"></div></div>
+            <div class="model-tab" id="model-tab-deps"><div class="dependency-map" id="modelDependencies"></div></div>
+            <div class="model-tab" id="model-tab-runs"><div class="run-list" id="modelRunList"></div></div>
+            <div class="model-tab" id="model-tab-steps"><div class="step-list" id="modelStepList"></div></div>
+            <div class="model-tab" id="model-tab-history"><div class="history-list" id="modelVersionList"></div></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-projects" data-title="项目与报告">
+          <div class="page-head"><div><p class="eyebrow">DELIVERABLES</p><h1>项目与报告</h1><p>围绕最终交付组织模型、SQL、记录和待办。</p></div><button class="primary-button" id="newProjectButton"><svg><use href="#i-plus"/></svg>新建项目</button></div>
+          <div class="project-board" id="projectBoard"></div>
+        </section>
+
+        <section class="view" id="view-notes" data-title="工作记录">
+          <div class="page-head"><div><p class="eyebrow">WORKING NOTES</p><h1>工作记录</h1><p>把口径、判断、问题与复盘沉淀为可检索的长期记忆。支持收藏、归档与修改历史。</p></div><div class="batch-actions"><button class="secondary-button danger-button" id="noteBatchDelete" disabled>删除所选</button><button class="primary-button" id="newNoteButton"><svg><use href="#i-plus"/></svg>新建记录</button></div></div>
+          <div class="list-toolbar"><div class="filter-tabs" id="noteScopeFilters"><button class="active" data-note-scope="active">进行中</button><button data-note-scope="favorite">收藏</button><button data-note-scope="archived">已归档</button></div><div class="inline-search wide"><svg><use href="#i-search"/></svg><input id="noteSearch" placeholder="搜索标题、正文或标签"></div></div>
+          <div class="notes-layout"><aside class="note-categories" id="noteCategoryFilters"></aside><div class="note-feed"></div></div>
+        </section>
+
+        <section class="view" id="view-links" data-title="常用导航">
+          <div class="page-head"><div><p class="eyebrow">QUICK ACCESS</p><h1>常用导航</h1><p>把内部系统和常用工作入口放在一个可搜索的位置。</p></div><button class="primary-button" id="newNavigationButton"><svg><use href="#i-plus"/></svg>添加导航</button></div>
+          <div class="list-toolbar"><div class="inline-search wide"><svg><use href="#i-search"/></svg><input id="navigationSearch" placeholder="搜索系统、分类或地址"></div></div>
+          <div id="navigationSections"></div>
+        </section>
+
+        <section class="view" id="view-data" data-title="数据管理">
+          <div class="page-head"><div><p class="eyebrow">DATA SAFETY</p><h1>数据管理</h1><p>备份本地数据库，导出工作资产，并在校验后导入或恢复。</p></div><button class="primary-button" id="createBackupButton"><svg><use href="#i-plus"/></svg>立即备份</button></div>
+          <div class="data-management-grid">
+            <section class="panel data-tool-card"><div class="panel-head"><div><h2>导出数据</h2><p>JSON 适合完整迁移，CSV 适合表格分析</p></div></div><div class="data-tool-body"><button class="secondary-button" id="exportJsonButton">导出完整 JSON</button><div class="inline-export"><select id="csvExportEntity"><option value="tasks">任务</option><option value="work_notes">工作记录</option><option value="sql_assets">SQL 资产</option><option value="stored_procedures">存储过程</option><option value="procedure_deployments">存储过程发布</option><option value="data_requests">数据请求</option><option value="monitoring_models">监测模型</option><option value="model_versions">模型版本</option><option value="projects">项目</option><option value="navigation_items">常用导航</option><option value="week_reviews">周复盘</option><option value="weekly_reports">周工作报告</option><option value="generated_reports">模板报告</option></select><button class="secondary-button" id="exportCsvButton">导出 CSV</button></div></div></section>
+            <section class="panel data-tool-card"><div class="panel-head"><div><h2>导入数据</h2><p>导入前自动生成安全备份，并展示差异明细</p></div></div><div class="data-tool-body"><label class="file-picker" aria-label="JSON 数据包"><input type="file" id="jsonImportFile" accept="application/json,.json"><span>选择 JSON 文件</span></label><div class="inline-export"><select id="csvImportEntity" aria-label="CSV 数据类型"><option value="tasks">任务</option><option value="work_notes">工作记录</option><option value="sql_assets">SQL 资产</option><option value="data_requests">数据请求</option><option value="projects">项目</option></select><label class="file-picker compact" aria-label="CSV 文件"><input type="file" id="csvImportFile" accept="text/csv,.csv"><span>选择 CSV 文件</span></label></div><label class="import-mode">导入模式<select id="dataImportMode"><option value="insert_only">仅新增，不覆盖现有数据</option><option value="merge">合并并更新同编号数据</option></select></label><p class="form-hint" id="importStatus">请选择由本工作台导出的 JSON 或 CSV 文件。</p><pre class="import-diff" id="importDiff" hidden></pre></div></section>
+            <section class="panel data-tool-card"><div class="panel-head"><div><h2>备份保留与定时</h2><p>超出数量后自动清理；可按小时触发自动备份</p></div></div><div class="data-tool-body"><label>最多保留备份数<input id="backupRetention" type="number" min="3" max="200" value="20"></label><label>自动备份间隔（小时，0=关闭）<input id="autoBackupHours" type="number" min="0" max="720" value="0"></label><button class="secondary-button" id="saveSettingsButton" type="button">保存策略</button><p class="form-hint" id="settingsStatus">默认保留最近 20 份备份；定时备份在启动与进入数据管理时检查。</p><p class="form-hint" id="backupVisibilityHint">尚未读取备份状态。</p><p class="form-hint warning-hint" id="secretWarningHint" hidden></p></div></section>
+          </div>
+          <div class="data-management-grid">
+            <section class="panel data-tool-card" id="aiSettingsPanel"><div class="panel-head"><div><h2>AI 模型</h2><p>兼容 OpenAI 接口；关闭后仍可用本地规则辅助</p></div></div><div class="data-tool-body">
+              <label class="cover-toggle"><input id="aiEnabled" type="checkbox"> 启用 AI</label>
+              <label>接口地址<input id="aiBaseUrl" placeholder="https://api.openai.com/v1"></label>
+              <label>模型名称<input id="aiModel" placeholder="gpt-4o-mini"></label>
+              <label>API Key<input id="aiApiKey" type="password" placeholder="留空表示不修改" autocomplete="off"></label>
+              <label class="cover-toggle"><input id="aiIncludeSql" type="checkbox" checked> 允许向模型发送 SQL 正文</label>
+              <p class="form-hint">开启后，智能整理 SQL 前会再次确认发送范围；关闭则仅发送名称与结构摘要。</p>
+              <div class="batch-actions"><button class="secondary-button" id="clearAiKeyButton" type="button">清除密钥</button><button class="primary-button" id="saveAiSettingsButton" type="button">保存 AI 配置</button></div>
+              <p class="form-hint" id="aiSettingsStatus">未配置。密钥仅本地加密保存，不会在页面明文回显。</p>
+            </div></section>
+            <section class="panel data-tool-card"><div class="panel-head"><div><h2>访问密码</h2><p>单用户本地访问保护</p></div></div><div class="data-tool-body">
+              <label>新访问密码<input id="accessPassword" type="password" placeholder="留空表示不修改" autocomplete="new-password"></label>
+              <div class="batch-actions"><button class="secondary-button" id="clearAccessPasswordButton" type="button">清除密码</button><button class="primary-button" id="saveAccessPasswordButton" type="button">保存密码</button></div>
+              <p class="form-hint" id="accessPasswordStatus">当前未启用访问密码。</p>
+            </div></section>
+            <section class="panel data-tool-card"><div class="panel-head"><div><h2>钉钉 / ICS 日程</h2><p>只读同步到今日与本周；推荐使用钉钉日历导出的 ICS 链接</p></div></div><div class="data-tool-body">
+              <label class="cover-toggle"><input id="calendarEnabled" type="checkbox"> 启用日程同步</label>
+              <label>订阅名称<input id="calendarName" value="钉钉日程"></label>
+              <label>ICS 地址<input id="calendarIcsUrl" placeholder="https://..."></label>
+              <div class="batch-actions"><button class="secondary-button" id="saveCalendarSettingsButton" type="button">保存并创建订阅</button><button class="primary-button" id="syncCalendarButton" type="button">立即同步</button></div>
+              <p class="form-hint" id="calendarSettingsStatus">保存 ICS 链接后可同步到本地日历事件。</p>
+              <div id="calendarSubscriptionList" class="history-list"><p class="empty-state">暂无订阅</p></div>
+            </div></section>
+          </div>
+          <section class="panel backup-panel"><div class="panel-head"><div><h2>SQLite 备份</h2><p>支持整库恢复或按表恢复；恢复前会再次自动备份</p></div><button class="text-button" id="refreshBackupsButton">刷新列表</button></div><div class="backup-list" id="backupList"><p class="empty-state">正在读取备份…</p></div></section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay"></div>
+  <aside class="drawer drawer-wide" id="sqlDrawer" aria-hidden="true">
+    <header><div><p class="eyebrow">SQL ASSET / Q-128</p><h2 id="drawerTitle">采购付款异常明细</h2></div><div class="drawer-actions"><button class="secondary-button" id="editSqlButton">编辑</button><button class="secondary-button danger-button" id="deleteSqlButton">删除</button><button class="icon-button" id="closeDrawer" aria-label="关闭"><svg><use href="#i-close"/></svg></button></div></header>
+    <div class="drawer-body">
+      <div class="detail-summary"><div><span>当前版本</span><strong>v2.4</strong></div><div><span>最近验证</span><strong>2026-10-20</strong></div><div><span>复用次数</span><strong>18</strong></div></div>
+      <section><div class="section-title"><h3>用途说明</h3><span class="ai-label">AI 摘要</span></div><p>用于识别采购付款过程中的拆单支付、非工作时段付款及审批顺序异常，结果供人工复核，不直接形成审计结论。</p></section>
+      <section class="sql-logic-section"><div class="section-title"><h3>查询逻辑</h3><div class="sql-toolbar"><span class="sql-lang-badge">SQL</span><select id="sqlVersion"><option>v2.4 当前</option></select><button class="copy-button" id="compareSqlVersionsButton" type="button"><span>对比版本</span></button><button class="copy-button" id="newSqlVersionButton"><svg><use href="#i-plus"/></svg><span>新建版本</span></button><button class="copy-button" id="copySql"><svg><use href="#i-copy"/></svg><span>复制 SQL</span></button></div></div>
+        <div class="sql-code-shell"><div class="sql-code-chrome"><span></span><span></span><span></span><em>query.sql</em></div><pre class="sql-code" id="sqlCodeView"><code></code></pre></div>
+      </section>
+      <section><h3>版本历史</h3><div class="version-list" id="sqlVersionHistory"></div></section>
+      <section><h3>资产关系</h3><div class="relation-row"><span>关联项目</span><strong>采购异常监测模型</strong></div><div class="relation-row"><span>关联请求</span><strong>DR-0258 采购付款明细</strong></div><div class="relation-row"><span>涉及表</span><strong>dwd.purchase_payment 等 4 张表</strong></div></section>
+    </div>
+  </aside>
+
+  <aside class="drawer entity-drawer" id="entityDrawer" aria-hidden="true" aria-labelledby="entityDetailTitle">
+    <header>
+      <div><p class="eyebrow" id="entityDetailEyebrow">DETAIL</p><h2 id="entityDetailTitle">详情</h2></div>
+      <div class="drawer-actions"><button class="secondary-button" id="editEntityDetailButton">编辑</button><button class="secondary-button danger-button" id="deleteEntityDetailButton">删除</button><button class="icon-button" id="closeEntityDrawer" aria-label="关闭详情"><svg><use href="#i-close"/></svg></button></div>
+    </header>
+    <div class="drawer-body entity-detail-body">
+      <div class="detail-summary" id="entityDetailSummary"></div>
+      <div id="entityDetailContent"></div>
+    </div>
+  </aside>
+
+  <div class="command" id="command" aria-hidden="true">
+    <div class="command-box"><div class="command-input"><svg><use href="#i-search"/></svg><input id="commandInput" placeholder="搜索任务、SQL、模型、项目或记录"><kbd>Esc</kbd></div><div class="command-results" id="commandResults"><p>快速进入</p><button data-command-view="reports"><svg><use href="#i-chart"/></svg><span><strong>报告助手</strong><small>生成本周总结与下周计划</small></span><em>页面</em></button><button data-command-view="search"><svg><use href="#i-search"/></svg><span><strong>统一检索</strong><small>跨全部工作资产查找</small></span><em>页面</em></button><button data-command-view="sql"><svg><use href="#i-code"/></svg><span><strong>SQL 资产</strong><small>查询与版本记录</small></span><em>页面</em></button><button data-command-view="data"><svg><use href="#i-database"/></svg><span><strong>数据管理</strong><small>备份、导入与导出</small></span><em>页面</em></button></div><button class="command-all" id="commandShowAll" hidden>查看全部检索结果 →</button></div>
+  </div>
+
+  <div class="modal" id="recordModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="recordForm"><header><div><p class="eyebrow">WORKING NOTE</p><h2 id="recordModalTitle">新建工作记录</h2></div><div class="modal-header-actions"><button type="button" class="secondary-button" id="toggleNotePreview">预览</button><button type="button" class="secondary-button smart-button" id="analyzeNoteButton"><svg><use href="#i-model"/></svg>智能整理</button><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></div></header><input type="hidden" id="recordId"><div class="form-grid modal-form-grid note-form-grid"><label>记录类型<select id="recordType"><option>随手记录</option><option>口径说明</option><option>问题排查</option><option>模型维护</option><option>项目复盘</option></select></label><div class="note-flag-row" role="group" aria-label="记录标记"><label class="flag-chip"><input id="recordFavorite" type="checkbox"><span>收藏</span></label><label class="flag-chip"><input id="recordArchived" type="checkbox"><span>归档</span></label></div><label class="span-2">标题<input id="recordTitle" required maxlength="200" placeholder="一句话说明这条记录"></label><label class="span-2 markdown-editor-label">内容<div class="markdown-toolbar" id="markdownToolbar"><button type="button" data-md="bold"><b>B</b></button><button type="button" data-md="italic"><i>I</i></button><button type="button" data-md="ul">列表</button><button type="button" data-md="code">代码</button><button type="button" data-md="link">链接</button><button type="button" data-md="h2">标题</button></div><textarea id="recordContent" class="note-content-input" rows="16" placeholder="支持 Markdown：标题、列表、粗体、代码块、链接…"></textarea><div class="markdown-preview" id="recordPreview" hidden></div></label><label>标签<input id="recordTags" placeholder="多个标签用逗号分隔"></label><label>关联对象<input id="recordRelation" list="entityRelationOptions" placeholder="选择或输入关联对象" autocomplete="off"></label></div><section class="assistant-panel" id="noteAssistPanel" hidden><div class="assistant-panel-head"><div><strong>智能整理建议</strong><span id="noteAssistConfidence"></span></div><button type="button" id="applyNoteAssist">应用建议</button></div><div class="assistant-suggestion-grid" id="noteAssistSummary"></div><div class="similar-note-list" id="similarNoteList"></div><p>建议仅填入当前表单，保存前仍可修改。</p></section><section id="noteRevisionPanel" hidden><h3>修改历史</h3><div id="noteRevisionList" class="history-list"></div></section><footer><button type="button" class="secondary-button modal-close">取消</button><button type="button" class="secondary-button danger-button" id="deleteNoteButton" hidden>删除</button><button type="submit" class="primary-button">保存记录</button></footer></form></div>
+
+  <div class="modal" id="requestModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="requestForm"><header><div><p class="eyebrow">DATA REQUEST</p><h2 id="requestModalTitle">新建数据请求</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="requestId"><div class="form-grid modal-form-grid"><label class="span-2">请求主题<input id="requestTitle" required placeholder="例如：采购付款明细"></label><label>用途 / 项目<input id="requestPurpose" placeholder="例如：采购审计"></label><label>期望日期<input id="requestDue" type="date"></label><label>需求人<input id="requestRequester"></label><label>部门<input id="requestDepartment"></label><label>等待对象<input id="requestWaitingOn" placeholder="待确认时填写"></label><label>交付方式<input id="requestDeliveryMethod" placeholder="邮件/共享盘/系统"></label><label class="span-2">交付位置<input id="requestDeliveryLocation" placeholder="路径或链接"></label><label class="span-2">敏感说明<textarea id="requestSensitiveNotes" class="soft-area" rows="3" placeholder="敏感字段、脱敏方式、保存期限…"></textarea></label><label class="span-2">数据范围<textarea id="requestScope" class="soft-area" rows="5" placeholder="字段、时间范围、组织范围…"></textarea></label><label class="span-2">口径说明<textarea id="requestCaliber" class="soft-area" rows="5" placeholder="统计口径、排除项、待确认事项…"></textarea></label><label>状态<select id="requestStatus"><option value="pending">待处理</option><option value="waiting">待确认</option><option value="working">处理中</option><option value="done">已交付</option><option value="archived">已归档</option></select></label><label>下一步<input id="requestNextAction" placeholder="下一步动作"></label><label class="span-2">关联 SQL<div class="assoc-picker" data-sql-picker="requestSqlIds"><input type="hidden" id="requestSqlIds" value=""><div class="assoc-chips" id="requestSqlChips"></div><select id="requestSqlAdd" class="assoc-add"><option value="">添加 SQL 资产…</option></select></div></label><label>关联项目<div class="assoc-field-row"><select id="requestProject"><option value="">未关联</option></select><button type="button" class="secondary-button assoc-jump-btn" id="requestProjectJump" disabled>打开项目</button></div></label></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="button" class="secondary-button danger-button" id="deleteRequestButton" hidden>删除</button><button type="submit" class="primary-button">保存请求</button></footer></form></div>
+
+  <div class="modal" id="sqlModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="sqlForm"><header><div><p class="eyebrow">SQL ASSET</p><h2 id="sqlModalTitle">新建 SQL 资产</h2></div><div class="modal-header-actions"><button type="button" class="secondary-button smart-button" id="analyzeSqlButton"><svg><use href="#i-model"/></svg>生成说明</button><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></div></header><input type="hidden" id="sqlId"><div class="form-grid modal-form-grid"><label class="span-2">查询名称<input id="sqlName" required placeholder="例如：采购付款异常明细"></label><label>版本<input id="sqlCurrentVersion" value="v1.0"></label><label>状态<select id="sqlStatus"><option value="draft">草稿</option><option value="validated">已验证</option><option value="archived">已归档</option></select></label><label class="span-2">用途说明<textarea id="sqlPurpose" class="soft-area" rows="3"></textarea></label><label>标签<input id="sqlTags" placeholder="采购, 付款"></label><label>涉及表<input id="sqlTables" placeholder="dwd.payment, dim.vendor"></label><label>关联项目<select id="sqlProject"><option value="">未关联</option></select></label><label>验证说明<input id="sqlValidationNote" placeholder="样本复核结果"></label><label class="span-2">SQL 文本<textarea id="sqlText" class="code-input" rows="16" spellcheck="false" placeholder="SELECT ..."></textarea></label></div><section class="assistant-panel sql-assistant-panel" id="sqlAssistPanel" hidden><div class="assistant-panel-head"><div><strong>SQL 说明与风险建议</strong><span id="sqlAssistLevel"></span></div><button type="button" id="applySqlAssist">应用建议</button></div><div class="assistant-suggestion-grid" id="sqlAssistSummary"></div><ul id="sqlRiskList"></ul><p>分析过程不会连接数据库或执行 SQL。</p></section><p class="form-hint">安全说明：工作台只保存 SQL 文本，不连接数据库，也不会执行查询。</p><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存 SQL</button></footer></form></div>
+
+  <div class="modal" id="taskModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="taskForm"><header><div><p class="eyebrow">WEEK PLAN</p><h2 id="taskModalTitle">新建任务</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="taskId"><div class="form-grid modal-form-grid"><label class="span-2">任务标题<input id="taskTitle" required placeholder="例如：复核采购异常模型命中样本"></label><label>计划日期<input id="taskDate" type="date" required></label><label>时间<input id="taskTime" type="time"></label><label>状态<select id="taskStatus"><option value="todo">待处理</option><option value="doing">进行中</option><option value="done">已完成</option><option value="blocked">受阻</option></select></label><label>优先级<select id="taskPriority"><option value="medium">中</option><option value="high">高</option><option value="low">低</option></select></label><label>任务类型<select id="taskType"><option value="task">一般任务</option><option value="model">监测模型</option><option value="request">数据请求</option><option value="sql">SQL</option><option value="report">报告</option><option value="note">记录</option><option value="meeting">会议</option></select></label><label>重复<select id="taskRecurrence"><option value="none">不重复</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="custom">自定义天数</option></select></label><label>自定义间隔（天）<input id="taskRecurrenceInterval" type="number" min="1" max="365" value="7"></label><label>提醒日期<input id="taskRemindAt" type="date"></label><label class="span-2">等待对象<input id="taskWaitingOn" placeholder="受阻/等待他人时填写"></label><label>关联对象<input id="taskRelation" list="entityRelationOptions" placeholder="选择或输入关联对象" autocomplete="off"></label><label>实际耗时（分钟）<input id="taskActualMinutes" type="number" min="0" max="100000" value="0"></label><label class="span-2">完成结果<textarea id="taskCompletionResult" class="soft-area" rows="3" placeholder="完成后填写结果摘要，进入周复盘与统计"></textarea></label><label class="span-2">备注<textarea id="taskNotes" class="soft-area" rows="4" placeholder="验收标准、注意事项或下一步…"></textarea></label></div><p class="form-hint">完成且开启重复时，会自动生成下一次未完成任务。也可拖动任务卡改期。</p><footer><button type="button" class="secondary-button modal-close">取消</button><button type="button" class="secondary-button" id="copyTaskButton" hidden>复制到下周</button><button type="button" class="secondary-button danger-button" id="deleteTaskButton" hidden>删除</button><button type="submit" class="primary-button">保存任务</button></footer></form></div>
+
+  <div class="modal" id="sqlVersionModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="sqlVersionForm"><header><div><p class="eyebrow">SQL VERSION</p><h2>创建新版本</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><div class="form-grid modal-form-grid"><label>版本号<input id="versionName" required placeholder="例如 v2.5"></label><label>验证状态<select id="versionStatus"><option value="draft">草稿</option><option value="validated">已验证</option><option value="archived">已归档</option></select></label><label class="span-2">变更说明<textarea id="versionSummary" class="soft-area" rows="3" required placeholder="说明本次调整原因和影响"></textarea></label><label class="span-2">SQL 文本<textarea id="versionSqlText" class="code-input" rows="16" required spellcheck="false"></textarea></label></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存并设为当前版本</button></footer></form></div>
+
+  <div class="modal" id="modelModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="modelForm"><header><div><p class="eyebrow">MONITORING MODEL</p><h2 id="modelModalTitle">新建监测模型</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="modelId"><div class="form-grid modal-form-grid"><label class="span-2">模型名称<input id="modelName" required></label><label>当前版本<input id="modelVersion" value="v1.0" required></label><label>状态<select id="modelStatus"><option value="normal">运行正常</option><option value="update_due">待更新</option><option value="paused">已暂停</option><option value="archived">已归档</option></select></label><label>调度计划<input id="modelSchedule" placeholder="例如：每日 06:30"></label><label class="span-2">关联 SQL<div class="assoc-picker" data-sql-picker="modelSqlIds"><input type="hidden" id="modelSqlIds" value=""><div class="assoc-chips" id="modelSqlChips"></div><select id="modelSqlAdd" class="assoc-add"><option value="">添加 SQL 资产…</option></select></div></label><label class="span-2">用途说明<textarea id="modelPurpose" class="soft-area" rows="3"></textarea></label><label class="span-2">规则定义<textarea id="modelRules" class="soft-area" rows="7" placeholder="每行一条：规则名称 | 规则说明"></textarea></label><label class="span-2">依赖对象<input id="modelDependenciesInput" placeholder="多个依赖用逗号分隔"></label><label class="span-2">更新步骤<textarea id="modelSteps" class="soft-area" rows="6" placeholder="每行一条：步骤名称 | 说明 | 完成/未完成"></textarea></label><label class="span-2">版本变更说明<input id="modelChangeSummary" placeholder="版本变化时填写"></label></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存模型</button></footer></form></div>
+
+  <div class="modal" id="procedureModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="procedureForm"><header><div><p class="eyebrow">STORED PROCEDURE</p><h2 id="procedureModalTitle">新建存储过程</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="procedureId"><div class="form-grid modal-form-grid"><label class="span-2">过程名称<input id="procedureName" required placeholder="例如：sp_audit_purchase_monitor"></label><label>数据库<input id="procedureDatabase"></label><label>Schema<input id="procedureSchema"></label><label>当前版本<input id="procedureVersion" value="v1.0" required></label><label>状态<select id="procedureStatus"><option value="draft">草稿</option><option value="testing">测试中</option><option value="active">生产启用</option><option value="paused">已暂停</option><option value="archived">已归档</option></select></label><label>负责人<input id="procedureOwner"></label><label>关联项目<select id="procedureProject"><option value="">未关联</option></select></label><label class="span-2">标签<input id="procedureTags" placeholder="采购, 模型支撑"></label><label class="span-2">用途说明<textarea id="procedurePurpose" class="soft-area" rows="3"></textarea></label><label class="span-2">过程定义<textarea id="procedureDefinition" class="code-input" rows="14" spellcheck="false"></textarea></label><label class="span-2">回滚脚本<textarea id="procedureRollback" class="code-input" rows="7" spellcheck="false"></textarea></label><label class="span-2">版本变更说明<input id="procedureChangeSummary"></label></div><section id="procedureLifecycle" hidden><div class="relation-manager"><section><h3>版本历史</h3><div id="procedureVersionList" class="history-list"></div></section><section><h3>环境发布</h3><div id="procedureDeploymentList" class="history-list"></div></section></div><div class="form-grid deployment-editor"><label>环境<select id="deploymentEnvironment"><option value="development">开发</option><option value="testing">测试</option><option value="production">生产</option></select></label><label>发布状态<select id="deploymentStatus"><option value="planned">计划中</option><option value="success">成功</option><option value="failed">失败</option><option value="rolled_back">已回滚</option></select></label><label>发布时间<input id="deploymentAt" type="datetime-local"></label><label>验证结果<input id="deploymentValidation"></label><label class="span-2">发布说明<input id="deploymentNotes"></label><label><input id="deploymentRollback" type="checkbox"> 已执行回滚</label><button type="button" class="secondary-button" id="saveDeploymentButton">记录发布</button></div></section><footer><button type="button" class="secondary-button danger-button" id="deleteProcedureButton" hidden>删除</button><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存资产</button></footer></form></div>
+
+  <div class="modal" id="projectModal" aria-hidden="true"><form class="modal-card modal-card-wide" id="projectForm"><header><div><p class="eyebrow">PROJECT</p><h2>新建项目</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><div class="form-grid modal-form-grid"><label class="span-2">项目模板<select id="newProjectTemplate"><option value="">不使用模板</option></select></label><label class="span-2">项目名称<input id="newProjectName" required></label><label>项目类型<select id="newProjectType"><option value="analysis">数据分析</option><option value="model">监测模型</option><option value="report">报告交付</option><option value="ai">AI 知识库</option><option value="skill">岗位技能</option></select></label><label>计划结束<input id="newProjectDueDate" type="date"></label><label class="span-2">项目目标<textarea id="newProjectGoal" class="soft-area" rows="4"></textarea></label><label class="span-2">下一步<input id="newProjectNextAction"></label></div><p class="form-hint">选择模板后会预填目标、下一步与检查清单，仍可修改。</p><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">创建项目</button></footer></form></div>
+
+  <div class="modal" id="navigationModal" aria-hidden="true"><form class="modal-card modal-card-wide" id="navigationForm"><header><div><p class="eyebrow">QUICK ACCESS</p><h2 id="navigationModalTitle">添加导航</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="navigationId"><div class="form-grid modal-form-grid"><label class="span-2">名称<input id="navigationTitle" required></label><label class="span-2">地址<input id="navigationUrl" type="url" required placeholder="https://..."></label><label>分类<input id="navigationCategory" value="常用工具" required></label><label>图标文字<input id="navigationIcon" value="链" maxlength="4"></label><label>颜色<select id="navigationColor"><option value="blue">蓝色</option><option value="cyan">青色</option><option value="green">绿色</option><option value="orange">橙色</option><option value="violet">紫色</option><option value="gray">灰色</option></select></label><label>排序<input id="navigationOrder" type="number" min="0" value="0"></label><label class="cover-toggle span-2"><input id="navigationShowOnHome" type="checkbox" checked> 在首页快速进入展示</label><label class="span-2">说明<textarea id="navigationDescription" class="soft-area" rows="3"></textarea></label></div><footer><button type="button" class="secondary-button danger-button" id="deleteNavigationButton" hidden>删除</button><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存导航</button></footer></form></div>
+
+  <div class="modal" id="modelRunModal" aria-hidden="true"><form class="modal-card modal-card-wide" id="modelRunForm"><header><div><p class="eyebrow">MODEL RUN</p><h2>记录模型运行</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="runModelId"><div class="form-grid modal-form-grid"><label>开始时间<input id="runStartedAt" type="datetime-local" required></label><label>结束时间<input id="runFinishedAt" type="datetime-local"></label><label>运行状态<select id="runStatus"><option value="success">成功</option><option value="running">运行中</option><option value="failed">失败</option><option value="cancelled">已取消</option></select></label><label>扫描数据量<input id="runScanned" type="number" min="0" value="0"></label><label>命中数量<input id="runHits" type="number" min="0" value="0"></label><label>已复核数量<input id="runReviewed" type="number" min="0" value="0"></label><label class="span-2">结果摘要<textarea id="runSummary" class="soft-area" rows="5" placeholder="记录异常情况、数据质量和后续动作"></textarea></label></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存运行记录</button></footer></form></div>
+
+  <div class="modal" id="projectRelationModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="projectRelationForm"><header><div><p class="eyebrow">PROJECT DETAIL</p><h2 id="projectRelationTitle">项目详情</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="relationProjectId"><div class="project-detail-summary" id="projectDetailSummary"></div><section class="project-editor"><div class="form-grid modal-form-grid"><label class="span-2">项目名称<input id="projectName" required></label><label>项目类型<input id="projectType"></label><label>状态<select id="projectStatus"><option value="active">进行中</option><option value="paused">已暂停</option><option value="done">已完成</option><option value="archived">已归档</option></select></label><label class="span-2">项目目标<textarea id="projectGoal" class="soft-area" rows="3"></textarea></label><label>完成度<input id="projectProgress" type="number" min="0" max="100"></label><label>计划结束<input id="projectDueDate" type="date"></label><label class="span-2">下一步<input id="projectNextAction"></label></div><div class="batch-actions"><button type="button" class="secondary-button" id="saveProjectButton">保存项目</button><button type="button" class="secondary-button" id="archiveProjectButton">归档项目</button><button type="button" class="secondary-button danger-button" id="deleteProjectButton">删除项目</button></div></section><div class="relation-manager"><section><h3>已关联对象</h3><div id="projectRelationList" class="project-relation-list"></div></section><section><h3>添加关联</h3><div class="form-grid modal-form-grid"><label>对象类型<select id="relationEntityType"><option value="sql_asset">SQL 资产</option><option value="model">监测模型</option><option value="task">任务</option><option value="data_request">数据请求</option><option value="note">工作记录</option></select></label><label>对象编号<input id="relationEntityId" required placeholder="例如 Q-128 或 M-014"></label><label>关系类型<select id="relationType"><option value="supporting">支撑资产</option><option value="delivery">交付对象</option><option value="dependency">依赖对象</option><option value="evidence">证据材料</option></select></label><label>说明<input id="relationNote" placeholder="关系说明"></label></div></section></div><footer><button type="button" class="secondary-button modal-close">关闭</button><button type="submit" class="primary-button">添加关联</button></footer></form></div>
+
+  <div class="modal" id="reportTemplateModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="reportTemplateForm"><header><div><p class="eyebrow">REPORT TEMPLATE</p><h2>报告模板管理</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><div class="template-manager"><section><div class="section-title"><h3>模板列表</h3><div class="batch-actions"><button class="text-button" type="button" id="exportReportTemplatesButton">导出自定义</button><label class="text-button file-inline">导入<input type="file" id="importReportTemplatesFile" accept="application/json,.json" hidden></label><button class="text-button" type="button" id="newReportTemplateButton">新建模板</button></div></div><div class="history-list template-list" id="reportTemplateList"></div></section><section class="template-editor"><input type="hidden" id="reportTemplateId"><div class="form-grid modal-form-grid"><label>模板名称<input id="reportTemplateName" required maxlength="120"></label><label>模板类型<select id="reportTemplateType"><option value="weekly" disabled>周工作总结（内置）</option><option value="custom">通用模板</option><option value="audit">专项检查</option><option value="project">项目报告</option><option value="model">模型简报</option></select></label><label class="span-2">用途说明<textarea id="reportTemplateDescription" class="soft-area" rows="3"></textarea></label><label>概览标题<input id="reportLabelSummary" value="总体概览"></label><label>成果标题<input id="reportLabelHighlights" value="完成与进展"></label><label>风险标题<input id="reportLabelRisks" value="阻塞与风险"></label><label>计划标题<input id="reportLabelNext" value="后续计划"></label><label class="span-2 cover-toggle"><input id="reportCoverEnabled" type="checkbox"> 启用封面页</label><label>编制单位<input id="reportCoverOrg" value="审计监察部"></label><label>封面副标题<input id="reportCoverSubtitle" value="内部工作报告"></label><label class="span-2">页脚说明<input id="reportCoverFooter" value="内部资料 · 请复核后使用"></label></div><p class="form-hint" id="reportTemplateHint">自定义模板可编辑和删除；内置模板可查看但不会被覆盖。</p></section></div><footer><button type="button" class="secondary-button danger-button" id="deleteReportTemplateButton" hidden>删除模板</button><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button" id="saveReportTemplateButton">保存模板</button></footer></form></div>
+
+  <div class="modal" id="tableRestoreModal" aria-hidden="true"><form class="modal-card modal-card-wide" id="tableRestoreForm"><header><div><p class="eyebrow">TABLE RESTORE</p><h2>按表恢复</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="tableRestoreBackupName"><p class="form-hint" id="tableRestoreHint">选择要从备份写回当前数据库的表。恢复前会自动创建安全备份。</p><div class="table-restore-grid" id="tableRestoreOptions"></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button danger-button">确认按表恢复</button></footer></form></div>
+
+  <div class="modal" id="accessModal" aria-hidden="true"><form class="modal-card modal-card-compact" id="accessForm"><header><div><p class="eyebrow">ACCESS</p><h2>输入访问密码</h2></div></header><p class="form-hint" id="accessUnlockHint">此工作台已启用单用户访问保护。连续失败会被短暂锁定。</p><label>访问密码<input id="accessUnlockPassword" type="password" required autocomplete="current-password"></label><p class="form-hint warning-hint" id="accessUnlockError" hidden></p><footer><button type="submit" class="primary-button">解锁</button></footer></form></div>
+  <div class="modal" id="sqlDiffModal" aria-hidden="true"><div class="modal-card modal-card-sheet"><header><div><p class="eyebrow">SQL DIFF</p><h2>版本对比</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><div class="form-grid modal-form-grid"><label>左侧版本<select id="sqlDiffLeft"></select></label><label>右侧版本<select id="sqlDiffRight"></select></label></div><p class="form-hint" id="sqlDiffSensitiveHint"></p><pre class="import-diff" id="sqlDiffOutput">选择两个版本后显示差异</pre><footer><button type="button" class="secondary-button" id="runSqlDiffButton">生成差异</button><button type="button" class="secondary-button modal-close">关闭</button></footer></div></div>
+  <div class="toast" id="toast">操作已完成</div>
+
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5M5.5 9v11h13V9M9.5 20v-6h5v6"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M4 6.5h16v14H4zM8 3v6M16 3v6M4 11h16"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 4h16v15H4zM4 14h4l2 3h4l2-3h4"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8.5 7-5 5 5 5M15.5 7l5 5-5 5M14 4l-4 16"/></symbol>
+    <symbol id="i-model" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="m7 7 4 9M17 7l-4 9M7 6h10"/></symbol>
+    <symbol id="i-project" viewBox="0 0 24 24"><path d="M3.5 6.5h7l2 2h8v11h-17z"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 3.5h14v17H5zM8 8h8M8 12h8M8 16h5"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M9.5 14.5 14.5 9M8 17H6a4 4 0 0 1 0-8h4M16 7h2a4 4 0 0 1 0 8h-4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 17h12l-1.5-2.5V10a4.5 4.5 0 0 0-9 0v4.5zM10 20h4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V8M10 20V4M16 20v-9M22 20V6"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="M8 4v16M4 8l4-4 4 4M16 20V4M12 16l4 4 4-4"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 16H3V4h12v1"/></symbol>
+  </svg>
+  <datalist id="entityRelationOptions"></datalist>
+  <script src="app.js?v=1.9.10"></script>
+</body>
+</html>
+
