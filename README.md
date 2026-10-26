@@ -4,13 +4,11 @@
 
 `工作请求 → 周计划 / 日程 → SQL 取数 → 模型维护 → 审监监测台账 → 记录复盘 → 周报输出`
 
-正式应用位于 [`audit-ai-workbench-ui/workbench-v2`](audit-ai-workbench-ui/workbench-v2)，当前版本 **v1.9.28**。
+正式应用位于 [`audit-ai-workbench-ui/workbench-v2`](audit-ai-workbench-ui/workbench-v2)，当前版本 **v1.9.29**。
 
-界面主题：**Soft Welcome**（暖黄浅底、胶囊导航、大圆角卡片）。设计方向见 [`audit-ai-workbench-ui/direction-approved.md`](audit-ai-workbench-ui/direction-approved.md)。
+界面主题：**Soft Welcome**。同一套页面同时适配 **电脑浏览器** 与 **手机浏览器**（底部快捷栏 + 抽屉导航）。
 
-## 快速开始
-
-在 PowerShell 中：
+## 快速开始（本机）
 
 ```powershell
 cd audit-ai-workbench-ui\workbench-v2
@@ -18,30 +16,51 @@ cd audit-ai-workbench-ui\workbench-v2
 .\run.ps1
 ```
 
-然后打开：
+- 电脑：http://127.0.0.1:8765/
+- 手机（同一 Wi‑Fi）：http://\<电脑局域网IP\>:8765/  
+  （`run.ps1` 默认监听 `0.0.0.0`；可用 `$env:WORKBENCH_HOST='127.0.0.1'` 限制仅本机）
 
-- 工作台：http://127.0.0.1:8765/
-- API 文档：http://127.0.0.1:8765/docs
+## Docker 部署（电脑 + 手机）
+
+```powershell
+cd audit-ai-workbench-ui\workbench-v2
+$env:WORKBENCH_SECRET = "请替换为随机密钥"
+docker compose up -d --build
+```
+
+- 电脑访问：http://127.0.0.1:8765/
+- 手机访问：http://\<服务器或电脑局域网IP\>:8765/
+- 数据卷：`workbench-data`（SQLite 持久化）
+- 可选：`$env:WORKBENCH_PORT='8765'` 改映射端口
+
+镜像已包含 Soft Welcome 主题样式（`ui-soft-welcome.css`）及完整前端资源。
+
+## 手机端使用要点
+
+| 能力 | 说明 |
+|---|---|
+| 底部栏 | 今日 / 本周 / 请求 / 台账 / 更多 |
+| 更多 | 打开完整侧栏导航（统计、SQL、模型、记录、数据管理等） |
+| 本周计划 | 横向滑动日列；可完成任务、同步日历 |
+| 台账 / 请求 | 单列卡片与表单；弹窗适配窄屏 |
+| 安全区 | 支持刘海屏 `safe-area` 与 `viewport-fit=cover` |
+
+复杂编辑（长 SQL、数据管理）建议在电脑端完成；手机侧重查看、催办与轻量操作。
 
 ## 仓库结构
 
 | 路径 | 说明 |
 |---|---|
-| `audit-ai-workbench-ui/workbench-v2/` | 正式应用（HTML/JS + FastAPI + SQLite） |
-| `audit-ai-workbench-ui/design-demos/` | Soft Welcome 等视觉方向 HTML 原型 |
+| `audit-ai-workbench-ui/workbench-v2/` | 正式应用（HTML/JS + FastAPI + SQLite + Docker） |
+| `audit-ai-workbench-ui/design-demos/` | Soft Welcome 等视觉方向原型 |
 | `audit-ai-workbench-ui/*.md` | 产品事实、设计规范与方向说明 |
-| `审计监察数据分析师个人工作台产品需求说明书_v0.1.docx` | 产品需求原稿 |
 
 ## 能力概览
 
-- 工作区：今日、本周计划、统计复盘、数据请求、统一检索、SQL 资产、存储过程、监测模型、**审监监测台账**、工作记录、常用导航、数据管理
-- 本周计划：周一至周日看板；任务与日程同列；一键完成/恢复；本页可同步日历
-- 审监监测台账：四大类 22 项预置监管条目；周期、规划逻辑、代码备份、更新步骤、执行记录
-- 数据请求：可内嵌 SQL 代码记录，也可关联 SQL 资产
-- 本地持久化：FastAPI + SQLite；导入/恢复前自动安全备份
-- 钉钉 CalDAV / ICS 日程只读同步；AI 配置（OpenAI 兼容）；可选访问密码
-- Docker 部署（数据卷持久化）
-- **不连接、不执行**真实业务数据库 SQL
+- 审监监测台账、本周计划（日程+待办）、数据请求 SQL 记录
+- Soft Welcome 响应式：电脑顶栏导航 / 手机底栏+抽屉
+- FastAPI + SQLite；备份恢复；钉钉 CalDAV / ICS；可选访问密码
+- **不连接、不执行**真实业务库 SQL
 
 ## 测试
 
@@ -50,12 +69,4 @@ cd audit-ai-workbench-ui\workbench-v2
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Docker：
-
-```powershell
-cd audit-ai-workbench-ui\workbench-v2
-$env:WORKBENCH_SECRET = "请替换为随机密钥"
-docker compose up -d --build
-```
-
-更细的功能说明与版本记录见 [`audit-ai-workbench-ui/workbench-v2/README.md`](audit-ai-workbench-ui/workbench-v2/README.md)。
+细节见 [`audit-ai-workbench-ui/workbench-v2/README.md`](audit-ai-workbench-ui/workbench-v2/README.md)。

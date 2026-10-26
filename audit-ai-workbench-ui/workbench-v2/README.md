@@ -1,10 +1,10 @@
-# 数智审监工作台 V2（v1.9.28）
+# 数智审监工作台 V2（v1.9.29）
 
 面向审计监察数据分析师的本地单用户工作台，围绕以下工作闭环组织：
 
 `工作请求 → 周计划 / 日程 → SQL 取数 → 模型维护 → 审监监测台账 → 记录复盘 → 周报输出`
 
-界面主题为 **Soft Welcome**（`ui-soft-welcome.css` + `theme-soft-welcome`）。
+界面主题为 **Soft Welcome**（`ui-soft-welcome.css` + `theme-soft-welcome`）。同一应用可在电脑与手机浏览器打开；Docker 部署后可通过局域网 IP 在手机访问。
 
 ## 当前内容
 
@@ -38,16 +38,25 @@
 
 访问 http://127.0.0.1:8765/ ，API 文档见 `/docs`。
 
-## Docker
+## Docker（电脑 + 手机）
 
 ```powershell
 $env:WORKBENCH_SECRET = "请替换为随机密钥"
 docker compose up -d --build
 ```
 
-- 端口：`8765`
+- 电脑：http://127.0.0.1:8765/
+- 手机：http://\<主机局域网IP\>:8765/（容器已监听 `0.0.0.0`）
+- 端口：`WORKBENCH_PORT`（默认 8765）
 - 数据卷：`workbench-data` → `/data`
-- 环境变量：`WORKBENCH_SECRET`、`WORKBENCH_PORT`、`WORKBENCH_DATA_DIR`
+- 环境变量：`WORKBENCH_SECRET`、`WORKBENCH_PORT`、`WORKBENCH_DATA_DIR`、`WORKBENCH_HOST`
+- 镜像包含：`index.html`、`app.js`、`styles.css`、`ui-apple-hig.css`、`ui-soft-welcome.css`、`backend/`
+
+## 手机浏览
+
+- ≤760px：底部快捷栏（今日 / 本周 / 请求 / 台账 / 更多）+ 抽屉完整导航
+- 本周计划日列横向滑动；列表/台账/表单改为单列；弹层与抽屉适配安全区
+- 本机开发：`.\run.ps1` 默认 `--host 0.0.0.0`，手机用电脑 IP 访问
 
 ## 关键文件
 
@@ -61,6 +70,11 @@ docker compose up -d --build
 - `tests/`：API 与冒烟测试
 
 ## 版本记录
+
+### v1.9.29
+
+- 手机端壳层：底栏快捷导航、抽屉遮罩、安全区与关键页单列/横滑布局。
+- Docker 镜像补齐 `ui-soft-welcome.css`；本机 `run.ps1` 默认监听 `0.0.0.0` 便于手机访问。
 
 ### v1.9.28
 

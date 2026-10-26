@@ -12,8 +12,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
-COPY index.html app.js styles.css ui-apple-hig.css ./
-COPY APPLE-HIG-DESIGN-SPEC.md README.md ./
+COPY index.html app.js styles.css ui-apple-hig.css ui-soft-welcome.css ./
+COPY README.md ./
 
 RUN mkdir -p /data
 

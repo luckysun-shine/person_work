@@ -327,7 +327,8 @@ function showView(name) {
   document.title = `${target.dataset.title} · 数智审监工作台`;
   const workspaceTitle = $('#workspaceTitle');
   if (workspaceTitle) workspaceTitle.textContent = target.dataset.title;
-  $('#sidebar').classList.remove('open');
+  closeMobileNav();
+  syncMobileTabbar(name);
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (name === 'data' && state.apiAvailable) { refreshBackups(); loadSettings(); maybeAutoBackup(); }
   if (name === 'stats' && state.apiAvailable) refreshStats();
@@ -4216,9 +4217,49 @@ async function importCsvFile(file) {
 $('#jsonImportFile').addEventListener('change', event => { const [file] = event.target.files; if (file) importJsonFile(file); event.target.value = ''; });
 $('#csvImportFile').addEventListener('change', event => { const [file] = event.target.files; if (file) importCsvFile(file); event.target.value = ''; });
 
-$('#menuButton').addEventListener('click', () => {
-  if (window.matchMedia('(max-width: 760px)').matches) $('#sidebar').classList.toggle('open');
+function isMobileShell() {
+  return window.matchMedia('(max-width: 760px)').matches;
+}
+
+function setMobileNavOpen(open) {
+  const sidebar = $('#sidebar');
+  const backdrop = $('#navBackdrop');
+  if (!sidebar) return;
+  sidebar.classList.toggle('open', open);
+  document.body.classList.toggle('nav-open', open);
+  if (backdrop) {
+    backdrop.hidden = !open;
+    backdrop.classList.toggle('is-visible', open);
+  }
+}
+
+function closeMobileNav() {
+  setMobileNavOpen(false);
+}
+
+function syncMobileTabbar(viewName = state.activeView) {
+  $$('#mobileTabbar [data-mobile-view]').forEach(button => {
+    button.classList.toggle('active', button.dataset.mobileView === viewName);
+  });
+}
+
+$('#menuButton')?.addEventListener('click', () => {
+  if (isMobileShell()) setMobileNavOpen(!$('#sidebar')?.classList.contains('open'));
   else document.body.classList.toggle('sidebar-collapsed');
+});
+$('#navBackdrop')?.addEventListener('click', closeMobileNav);
+$('#mobileMoreButton')?.addEventListener('click', () => {
+  if (!isMobileShell()) {
+    showView('data');
+    return;
+  }
+  setMobileNavOpen(true);
+});
+$$('#mobileTabbar [data-mobile-view]').forEach(button => {
+  button.addEventListener('click', () => showView(button.dataset.mobileView));
+});
+window.addEventListener('resize', () => {
+  if (!isMobileShell()) closeMobileNav();
 });
 
 function applyAppearance(mode) {
