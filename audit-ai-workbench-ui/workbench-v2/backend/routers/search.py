@@ -75,7 +75,7 @@ router = APIRouter(tags=["search"])
 
 SEARCH_ENTITIES = {
     "task": ("tasks", "title", ["title", "notes", "related_entity_id"], "week"),
-    "data_request": ("data_requests", "title", ["title", "purpose", "scope", "caliber_notes"], "requests"),
+    "data_request": ("data_requests", "title", ["title", "purpose", "scope", "caliber_notes", "sql_text"], "requests"),
     "sql_asset": ("sql_assets", "name", ["name", "purpose", "sql_text", "tags_json", "table_names_json"], "sql"),
     "model": ("monitoring_models", "name", ["name", "purpose", "rule_definitions_json"], "models"),
     "project": ("projects", "name", ["name", "goal", "next_action"], "projects"),

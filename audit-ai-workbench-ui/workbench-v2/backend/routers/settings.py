@@ -139,9 +139,16 @@ def update_settings(payload: SettingsUpdate) -> dict:
         if "app_secret" in updates:
             secret = updates.pop("app_secret") or ""
             current["app_secret"] = secret
+        if updates.pop("clear_caldav_password", False):
+            current["caldav_password"] = ""
+        if "caldav_password" in updates:
+            secret = updates.pop("caldav_password") or ""
+            if secret.strip():
+                current["caldav_password"] = secret
         current.update({k: v for k, v in updates.items() if v is not None})
         stored = dict(current)
         stored["app_secret"] = encrypt_secret(current.get("app_secret") or "")
+        stored["caldav_password"] = encrypt_secret(current.get("caldav_password") or "")
         C.set_setting("dingtalk_calendar", stored)
     if payload.clear_access_password:
         C.set_setting("access_password_hash", "")

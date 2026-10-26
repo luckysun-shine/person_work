@@ -18,6 +18,10 @@ const state = {
   models: [],
   currentModel: null,
   projects: [],
+  ledgerCategory: 'all',
+  ledgerQuery: '',
+  ledgerDetailTab: 'overview',
+  ledgerDetail: null,
   navigation: [],
   currentProject: null,
   currentDetail: null,
@@ -45,7 +49,10 @@ const state = {
   weekOffset: 0,
   weekBucket: 'current',
   weekTasks: [],
+  weekBoardEvents: [],
+  homeWeekTasks: [],
   calendarEvents: [],
+  weekCalendarEvents: [],
   projectTemplates: [],
   stats: null,
   statsPeriod: 'week',
@@ -147,7 +154,7 @@ function fillEntityRelationOptions() {
     opt.label = label || value;
     list.append(opt);
   };
-  (state.projects || []).forEach(item => add(item.id, `项目 · ${item.name || item.id}`));
+  (state.projects || []).forEach(item => add(item.id, `台账 · ${item.name || item.id}`));
   (state.sqlAssets || []).forEach(item => add(item.id, `SQL · ${item.name || item.id}`));
   (state.models || []).forEach(item => add(item.id, `模型 · ${item.name || item.id}`));
   (state.requests || []).forEach(item => add(item.id, `请求 · ${item.title || item.id}`));
@@ -281,6 +288,29 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
 }
 
+function updateNavCounts() {
+  const todayBadge = $('#navTodayCount');
+  if (todayBadge) todayBadge.textContent = String(state.focusTasks?.length || 0);
+  const requestBadge = $('#navRequestCount');
+  if (requestBadge) {
+    const openRequests = (state.requests || []).filter(item => !['done', 'archived'].includes(item.status)).length;
+    requestBadge.textContent = String(openRequests);
+    requestBadge.hidden = openRequests <= 0;
+  }
+  const modelBadge = $('#navModelCount');
+  if (modelBadge) {
+    const dueModels = (state.models || []).filter(item => item.status === 'update_due' || (item.pending_review_count || 0) > 0).length;
+    modelBadge.textContent = String(dueModels);
+    modelBadge.hidden = dueModels <= 0;
+    modelBadge.classList.toggle('risk', dueModels > 0);
+  }
+  const hint = $('#sidebarHealthHint');
+  if (hint && state.apiAvailable) {
+    const now = new Date();
+    hint.textContent = `今日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} 已连接`;
+  }
+}
+
 function showView(name) {
   const target = $(`#view-${name}`);
   if (!target) return;
@@ -300,7 +330,6 @@ function showView(name) {
   $('#sidebar').classList.remove('open');
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (name === 'data' && state.apiAvailable) { refreshBackups(); loadSettings(); maybeAutoBackup(); }
-  if (name === 'reports' && state.apiAvailable) loadWeeklyReport();
   if (name === 'stats' && state.apiAvailable) refreshStats();
   if (name === 'search') { refreshSearchHelpers(); setTimeout(() => $('#globalSearchInput').focus(), 20); }
 }
@@ -309,9 +338,20 @@ $$('[data-view]').forEach(button => button.addEventListener('click', () => showV
 $$('[data-view-jump]').forEach(button => button.addEventListener('click', () => showView(button.dataset.viewJump)));
 
 function updateTaskProgress() {
-  const summary = state.focusSummary || { done: 0, total: state.focusTasks.length };
-  $('#todayProgress').textContent = `${summary.done} / ${summary.total}`;
-  $('#todayProgressBar').style.width = `${summary.total ? summary.done / summary.total * 100 : 0}%`;
+  const summary = state.focusSummary || { done: 0, total: state.focusTasks.length, blocked: 0, waiting: 0 };
+  const total = summary.total || 0;
+  const done = summary.done || 0;
+  const waiting = summary.waiting ?? summary.blocked ?? 0;
+  const weekDone = summary.week_done_count ?? summary.week_done ?? done;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  if ($('#todayProgress')) $('#todayProgress').textContent = `${done} / ${total}`;
+  if ($('#todayProgressBar')) $('#todayProgressBar').style.width = `${pct}%`;
+  if ($('#todayProgressBarHero')) $('#todayProgressBarHero').style.width = `${pct}%`;
+  if ($('#todayWeekDoneBar')) $('#todayWeekDoneBar').style.width = `${Math.min(100, weekDone ? Math.max(18, weekDone * 8) : pct)}%`;
+  if ($('#todayWaitingBar')) $('#todayWaitingBar').style.width = `${waiting ? Math.min(100, 20 + waiting * 18) : 8}%`;
+  if ($('#todayStatTodo')) $('#todayStatTodo').textContent = String(Math.max(0, total - done));
+  if ($('#todayStatDone')) $('#todayStatDone').textContent = String(weekDone);
+  if ($('#todayStatWait')) $('#todayStatWait').textContent = String(waiting);
 }
 
 function escapeHtml(value = '') {
@@ -387,10 +427,8 @@ function applyHomeLayout(order = state.homeLayout) {
     .filter(Boolean);
   const finalOrder = [...(order || []).filter(key => HOME_LAYOUT_DEFAULT.includes(key)), ...normalized];
   state.homeLayout = finalOrder;
-  // 固定 bento 版式：仅允许右侧栏 projects / quick 上下互换，避免拖乱主栏
-  const projectIdx = finalOrder.indexOf('projects');
-  const quickIdx = finalOrder.indexOf('quick');
-  grid.dataset.rail = (quickIdx >= 0 && projectIdx >= 0 && quickIdx < projectIdx) ? 'quick-first' : 'projects-first';
+  // Soft Welcome 固定 bento：中部焦点/节奏/等待，下部请求/日程/待办
+  grid.dataset.rail = 'projects-first';
   $$('.home-card', grid).forEach(card => {
     card.style.order = '';
     card.style.gridColumn = '';
@@ -481,17 +519,77 @@ $('#todayNewTask')?.addEventListener('click', () => openTaskForm(null, localIsoD
 $('#todayGotoWeek')?.addEventListener('click', () => showView('week'));
 $('#todayTasksToWeek')?.addEventListener('click', () => showView('week'));
 
+function ledgerCycleLabel(cycle) {
+  return cycle || '按需';
+}
+
+function ledgerExecLabel(result) {
+  return ({ success: '成功', partial: '部分完成', failed: '失败' })[result] || result || '—';
+}
+
+function ledgerStatusLabel(status) {
+  return ({
+    active: ['进行中', 'working'],
+    paused: ['已暂停', 'waiting'],
+    done: ['已完成', 'done'],
+    archived: ['已归档', 'waiting'],
+  })[status] || [status || '进行中', 'working'];
+}
+
+function filteredLedgerProjects() {
+  const q = (state.ledgerQuery || '').trim().toLowerCase();
+  return (state.projects || []).filter(project => {
+    if (state.ledgerCategory !== 'all' && project.category !== state.ledgerCategory) return false;
+    if (!q) return true;
+    const hay = [project.name, project.goal, project.plan_detail, project.monitor_logic, project.next_action]
+      .filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+}
+
 function renderTodayProjects() {
-  const list = $('#todayProjects'); list.replaceChildren();
-  state.projects.filter(project => project.status === 'active').slice(0, 3).forEach(project => {
+  const list = $('#todayProjects');
+  const active = state.projects.filter(project => project.status === 'active');
+  const focus = active[0];
+  if ($('#todayFocusTitle')) {
+    $('#todayFocusTitle').textContent = focus?.name || '暂无进行中的监管项';
+  }
+  if ($('#todayFocusLead')) {
+    $('#todayFocusLead').textContent = focus
+      ? `${ledgerCycleLabel(focus.monitor_cycle)} · ${focus.next_action || '待安排下一步'}`
+      : '完善台账后，这里会显示周期与下一步。';
+  }
+  if ($('#todayFocusProgress')) {
+    const latest = focus?.latest_execution;
+    $('#todayFocusProgress').textContent = latest
+      ? ledgerExecLabel(latest.result)
+      : (focus ? ledgerCycleLabel(focus.monitor_cycle) : '—');
+  }
+  const card = $('#todayFocusCard');
+  if (card) {
+    card.onclick = focus
+      ? () => { showView('projects'); openProjectRelations(focus); }
+      : () => showView('projects');
+  }
+  if (!list) return;
+  list.replaceChildren();
+  active.slice(0, 3).forEach(project => {
     const button = make('button', 'project-progress'); button.type = 'button';
-    const copy = make('span'); copy.append(make('strong', '', project.name), make('small', '', project.next_action || '待安排下一步'));
-    const track = make('i'); const bar = make('u'); bar.style.width = `${project.progress}%`; track.append(bar);
-    button.append(copy, make('b', '', `${project.progress}%`), track);
-    button.addEventListener('click', () => { showView('projects'); openProjectRelations(project); });
+    const latest = project.latest_execution;
+    const copy = make('span');
+    copy.append(
+      make('strong', '', project.name),
+      make('small', '', `${ledgerCycleLabel(project.monitor_cycle)} · ${project.next_action || '待安排下一步'}`),
+    );
+    button.append(copy, make('b', '', latest ? ledgerExecLabel(latest.result) : '待执行'));
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      showView('projects');
+      openProjectRelations(project);
+    });
     list.append(button);
   });
-  if (!list.children.length) list.append(make('p', 'empty-state', '暂无进行中的项目'));
+  if (!list.children.length) list.append(make('p', 'empty-state', '暂无进行中的监管项'));
 }
 
 function renderTodayRequests() {
@@ -503,20 +601,92 @@ function renderTodayRequests() {
     .slice(0, 5);
   items.forEach(item => {
     const status = requestStatus[item.status] || [item.status, 'waiting'];
-    const button = make('button', 'table-row');
+    const button = make('button', 'soft-acc-item');
     button.type = 'button';
     button.append(
-      (() => { const cell = make('span'); cell.append(make('strong', '', item.title), make('small', '', `${item.id}${item.purpose ? ` · ${item.purpose}` : ''}`)); return cell; })(),
-      make('span', '', formatDate(item.created_at).slice(0, 10)),
-      make('span', '', item.next_action || '待安排'),
-      make('span', `status ${status[1]}`, status[0]),
+      make('strong', '', item.title),
+      make('small', '', `${item.next_action || '待安排'} · ${status[0]}`),
     );
     button.addEventListener('click', () => { showView('requests'); openEntityDrawer('data_request', item); });
     rows.append(button);
   });
-  if (!items.length) rows.append(make('p', 'empty-state', '暂无进行中的数据请求'));
+  if (!items.length) {
+    rows.append(make('p', 'empty-state home-placeholder', '暂无进行中的数据请求。'));
+  }
   const jump = $('#todayRequestsJump');
-  if (jump) jump.textContent = `查看全部 ${state.requests.length} →`;
+  if (jump) jump.textContent = `全部 →`;
+}
+
+function renderTodaySqlHome() {
+  const rows = $('#todaySqlRows');
+  if (!rows) return;
+  rows.replaceChildren();
+  const items = (state.sqlAssets || []).slice(0, 4);
+  items.forEach(item => {
+    const button = make('button', 'soft-acc-item');
+    button.type = 'button';
+    button.append(
+      make('strong', '', item.name || item.id),
+      make('small', '', `${item.current_version || 'v1'} · ${(item.table_names || []).slice(0, 2).join('、') || '未登记表'}`),
+    );
+    button.addEventListener('click', () => { showView('sql'); openSqlDrawer(item.id); });
+    rows.append(button);
+  });
+  if (!items.length) {
+    rows.append(make('p', 'empty-state home-placeholder', '暂无 SQL 资产，去 SQL 库新建。'));
+  }
+}
+
+function renderTodayModelsHome() {
+  const rows = $('#todayModelRows');
+  if (!rows) return;
+  rows.replaceChildren();
+  const statusNames = { normal: '运行正常', update_due: '待更新', paused: '已暂停', archived: '已归档' };
+  const items = (state.models || []).slice(0, 4);
+  items.forEach(item => {
+    const button = make('button', 'soft-acc-item');
+    button.type = 'button';
+    button.append(
+      make('strong', '', item.name || item.id),
+      make('small', '', `${item.current_version || 'v1'} · ${statusNames[item.status] || item.status || '未知'}`),
+    );
+    button.addEventListener('click', async () => {
+      showView('models');
+      const model = state.models.find(row => row.id === item.id);
+      if (model && typeof selectModel === 'function') await selectModel(model);
+    });
+    rows.append(button);
+  });
+  if (!items.length) {
+    rows.append(make('p', 'empty-state home-placeholder', '暂无监测模型，创建后在此显示状态。'));
+  }
+}
+
+function renderTodayNotesHome() {
+  const rows = $('#todayNoteRows');
+  if (!rows) return;
+  rows.replaceChildren();
+  const items = (state.notes || [])
+    .filter(item => !item.isArchived)
+    .slice()
+    .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))
+    .slice(0, 4);
+  items.forEach(item => {
+    const button = make('button', 'soft-acc-item');
+    button.type = 'button';
+    button.append(
+      make('strong', '', item.title || '未命名记录'),
+      make('small', '', `${item.type || '随手记录'} · ${formatDate(item.updatedAt || item.createdAt).slice(0, 10)}`),
+    );
+    button.addEventListener('click', () => {
+      showView('notes');
+      openEntityDrawer('note', item);
+    });
+    rows.append(button);
+  });
+  if (!items.length) {
+    rows.append(make('p', 'empty-state home-placeholder', '暂无工作记录，去记录页新建。'));
+  }
 }
 
 function nudgeReasonLabel(reason) {
@@ -645,7 +815,7 @@ function renderTodayTasks() {
       : attentionCount
         ? '先处理催办事项'
         : summary.total
-          ? '按优先级推进今天'
+          ? '早上好，准备开工'
           : '今天可以整理与复盘';
   }
   if ($('#todayAttentionCount')) {
@@ -685,6 +855,7 @@ async function refreshTodayTasks() {
   state.focusNudges = data.nudges || data.tasks.filter(task => task.needs_nudge).slice(0, 12);
   renderTodayTasks();
   maybeNotifyNudges(state.focusNudges);
+  if (!state._bootstrapping) refreshHomeWeekCalendar().catch(() => {});
 }
 
 function localIsoDate(value) {
@@ -707,6 +878,136 @@ function getWeekDates(offset = 0) {
   });
 }
 
+function getFullWeekDates(offset = 0) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const weekday = today.getDay() || 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - weekday + 1 + offset * 7);
+  return Array.from({ length: 7 }, (_, index) => {
+    const value = new Date(monday);
+    value.setDate(monday.getDate() + index);
+    return value;
+  });
+}
+
+function eventDateKey(value) {
+  return String(value || '').slice(0, 10);
+}
+
+function renderHomeWeekCalendar() {
+  const root = $('#homeWeekCalendar');
+  if (!root) return;
+  const dates = getFullWeekDates(0);
+  const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+  const todayIso = localIsoDate(new Date());
+  const tasks = state.homeWeekTasks || [];
+  const events = state.weekCalendarEvents || [];
+  const start = dates[0];
+  const end = dates[6];
+  let taskCount = 0;
+  let eventCount = 0;
+
+  root.replaceChildren();
+  const grid = make('div', 'home-week-cal-grid');
+  dates.forEach((date, index) => {
+    const iso = localIsoDate(date);
+    const dayTasks = tasks.filter(task => task.planned_date === iso);
+    const dayEvents = events.filter(event => eventDateKey(event.start_at) === iso);
+    taskCount += dayTasks.length;
+    eventCount += dayEvents.length;
+
+    const day = make('div', 'home-week-day');
+    if (iso === todayIso) day.classList.add('is-today');
+    day.dataset.date = iso;
+    day.title = `${date.getMonth() + 1}月${date.getDate()}日`;
+
+    const head = make('header', 'home-week-day-head');
+    head.append(make('span', '', weekdays[index]), make('b', '', String(date.getDate())));
+    day.append(head);
+
+    const list = make('div', 'home-week-day-list');
+    const items = [
+      ...dayEvents.map(event => ({ kind: 'event', event })),
+      ...dayTasks.map(task => ({ kind: 'task', task })),
+    ];
+    const visible = items.slice(0, 3);
+    visible.forEach(item => {
+      if (item.kind === 'event') {
+        const chip = make('button', 'home-week-item is-event');
+        chip.type = 'button';
+        const time = item.event.all_day ? '全天' : String(item.event.start_at || '').slice(11, 16);
+        chip.textContent = item.event.title || '日程';
+        chip.title = `${time} · ${item.event.title || '日程'}${item.event.location ? ` · ${item.event.location}` : ''}`;
+        chip.addEventListener('click', event => {
+          event.stopPropagation();
+          openEntityDrawer('calendar_event', item.event);
+        });
+        list.append(chip);
+      } else {
+        const chip = make('button', `home-week-item is-task${item.task.status === 'done' ? ' is-done' : ''}${item.task.priority === 'high' ? ' is-high' : ''}`);
+        chip.type = 'button';
+        chip.textContent = item.task.title || '待办';
+        chip.title = item.task.title || '待办';
+        chip.addEventListener('click', event => {
+          event.stopPropagation();
+          openEntityDrawer('task', item.task);
+        });
+        list.append(chip);
+      }
+    });
+    if (items.length > 3) {
+      list.append(make('span', 'home-week-more', `+${items.length - 3}`));
+    }
+    if (!items.length) list.append(make('span', 'home-week-empty', '—'));
+    day.append(list);
+    day.addEventListener('click', () => showView('week'));
+    grid.append(day);
+  });
+  root.append(grid);
+
+  const hint = $('#todayWeekCalHint');
+  if (hint) {
+    hint.textContent = `${start.getMonth() + 1}/${start.getDate()}–${end.getMonth() + 1}/${end.getDate()} · ${taskCount} 待办 · ${eventCount} 日程`;
+  }
+}
+
+async function refreshHomeWeekCalendar() {
+  const dates = getFullWeekDates(0);
+  const from = localIsoDate(dates[0]);
+  const to = localIsoDate(dates[6]);
+  if (!state.apiAvailable) {
+    state.homeWeekTasks = (state.weekTasks || []).filter(task => {
+      const day = task.planned_date || '';
+      return day >= from && day <= to;
+    });
+    if (!state.homeWeekTasks.length && state.focusTasks?.length) {
+      state.homeWeekTasks = state.focusTasks.filter(task => {
+        const day = task.planned_date || '';
+        return day >= from && day <= to;
+      });
+    }
+    state.weekCalendarEvents = (state.calendarEvents || []).filter(event => {
+      const day = eventDateKey(event.start_at);
+      return day >= from && day <= to;
+    });
+    renderHomeWeekCalendar();
+    return;
+  }
+  try {
+    const [tasks, events] = await Promise.all([
+      apiRequest(`/api/tasks?date_from=${from}&date_to=${to}`),
+      apiRequest(`/api/calendar/events?date_from=${from}&date_to=${to}`),
+    ]);
+    state.homeWeekTasks = Array.isArray(tasks) ? tasks : [];
+    state.weekCalendarEvents = Array.isArray(events) ? events : [];
+  } catch (_) {
+    state.homeWeekTasks = state.weekTasks || [];
+    state.weekCalendarEvents = state.calendarEvents || [];
+  }
+  renderHomeWeekCalendar();
+}
+
 function updateCurrentDateLabels() {
   const now = new Date();
   const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -724,95 +1025,211 @@ function taskTypeLabel(type) {
   return ({ task: '任务', model: '模型', request: '数据请求', sql: 'SQL', report: '报告', note: '记录', meeting: '会议' })[type] || '任务';
 }
 
+async function toggleWeekTaskDone(task, done) {
+  const nextStatus = done ? 'done' : 'todo';
+  await apiRequest(`/api/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
+  await Promise.all([refreshWeekTasks(), refreshTodayTasks()]);
+  showToast(done ? '已标记完成' : '已恢复为待办');
+}
+
+function makeWeekTaskCard(task) {
+  const card = make('article', 'plan-card');
+  card.draggable = true;
+  card.dataset.taskId = task.id;
+  if (task.priority === 'high') card.classList.add('high-card');
+  if (task.status === 'done') card.classList.add('done-card');
+  if (task.status === 'blocked') card.classList.add('blocked-card');
+  card.classList.add(`status-${task.status || 'todo'}`);
+
+  const top = make('div', 'plan-card-top');
+  const label = task.status === 'done' ? '已完成'
+    : task.status === 'blocked' ? '受阻'
+      : task.priority === 'high' ? '高优先'
+        : taskTypeLabel(task.type);
+  top.append(make('small', '', label));
+
+  const doneBtn = make('button', `plan-done-btn${task.status === 'done' ? ' is-done' : ''}`, task.status === 'done' ? '恢复' : '完成');
+  doneBtn.type = 'button';
+  doneBtn.title = task.status === 'done' ? '恢复为待办' : '标记完成';
+  doneBtn.addEventListener('click', async event => {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      await toggleWeekTaskDone(task, task.status !== 'done');
+    } catch (error) { showToast(error.message); }
+  });
+  top.append(doneBtn);
+
+  const body = make('button', 'plan-card-body');
+  body.type = 'button';
+  body.append(make('strong', '', task.title));
+  const meta = make('p', 'card-meta');
+  meta.append(
+    make('span', '', task.due_at || '未设置时间'),
+    make('span', 'card-relation', task.related_entity_id || task.notes || '个人计划'),
+  );
+  body.append(meta);
+  body.addEventListener('click', () => openEntityDrawer('task', task));
+
+  card.append(top, body);
+  card.addEventListener('dragstart', event => {
+    if (event.target.closest('button')) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.setData('text/plain', task.id);
+    event.dataTransfer.effectAllowed = 'move';
+    card.classList.add('dragging');
+  });
+  card.addEventListener('dragend', () => card.classList.remove('dragging'));
+  return card;
+}
+
+function makeWeekEventCard(event) {
+  const card = make('button', 'plan-card event-card');
+  card.type = 'button';
+  const time = event.all_day ? '全天' : String(event.start_at || '').slice(11, 16) || '日程';
+  const top = make('div', 'plan-card-top');
+  top.append(make('small', '', '日程'));
+  card.append(top, make('strong', '', event.title || '未命名日程'));
+  const meta = make('p', 'card-meta');
+  meta.append(
+    make('span', '', time),
+    make('span', 'card-relation', event.location || event.calendar_name || '外部日程'),
+  );
+  card.append(meta);
+  card.addEventListener('click', () => openEntityDrawer('calendar_event', event));
+  return card;
+}
+
 function renderWeekBoard() {
-  const dates = getWeekDates(state.weekOffset);
-  const weekdays = ['周一', '周二', '周三', '周四', '周五'];
+  const dates = getFullWeekDates(state.weekOffset);
+  const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
   const todayIso = localIsoDate(new Date());
   const board = $('#weekBoard');
   board.replaceChildren();
+  const events = state.weekBoardEvents || [];
   dates.forEach((date, index) => {
     const iso = localIsoDate(date);
     const column = make('div', 'day-column');
     column.dataset.date = iso;
     if (iso === todayIso) column.classList.add('today-column');
-    const header = make('header');
-    header.append(make('span', '', `${weekdays[index]}${iso === todayIso ? ' · 今天' : ''}`), make('b', '', date.getDate()));
+    if (index >= 5) column.classList.add('weekend-column');
+    const header = make('header', 'day-column-head');
+    const labelWrap = make('div', 'day-column-label');
+    labelWrap.append(make('span', '', weekdays[index]));
+    if (iso === todayIso) labelWrap.append(make('em', 'day-today-tag', '今天'));
+    const dayTasks = state.weekTasks.filter(task => task.planned_date === iso);
+    const dayEvents = events.filter(event => eventDateKey(event.start_at) === iso);
+    header.append(labelWrap, make('b', '', String(date.getDate())));
     column.append(header);
-    const tasks = state.weekTasks.filter(task => task.planned_date === iso);
-    tasks.forEach(task => {
-      const card = make('button', 'plan-card');
-      card.type = 'button'; card.draggable = true; card.dataset.taskId = task.id;
-      if (task.priority === 'high') card.classList.add('high-card');
-      if (task.status === 'done') card.classList.add('done-card');
-      card.classList.add(`status-${task.status}`);
-      const label = task.status === 'done' ? '已完成' : task.status === 'blocked' ? '受阻' : task.priority === 'high' ? '高优先' : taskTypeLabel(task.type);
-      card.append(make('small', '', label), make('strong', '', task.title));
-      const meta = make('p', 'card-meta');
-      meta.append(make('span', '', task.due_at || '未设置时间'), make('span', 'card-relation', task.related_entity_id || task.notes || '个人计划'));
-      card.append(meta);
-      card.addEventListener('click', () => openEntityDrawer('task', task));
-      card.addEventListener('dragstart', event => {
-        event.dataTransfer.setData('text/plain', task.id);
-        event.dataTransfer.effectAllowed = 'move';
-        card.classList.add('dragging');
-      });
-      card.addEventListener('dragend', () => card.classList.remove('dragging'));
-      column.append(card);
+    const count = make('div', 'day-column-count', `${dayTasks.length} 计划 · ${dayEvents.length} 日程`);
+    column.append(count);
+
+    dayEvents.forEach(event => column.append(makeWeekEventCard(event)));
+    dayTasks.forEach(task => column.append(makeWeekTaskCard(task)));
+
+    if (!dayTasks.length && !dayEvents.length) {
+      column.append(make('span', 'day-empty', '拖动任务到这里'));
+    }
+    column.addEventListener('dragover', event => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      column.classList.add('drag-over');
     });
-    if (!tasks.length) column.append(make('span', 'day-empty', '拖动任务到这里'));
-    column.addEventListener('dragover', event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; column.classList.add('drag-over'); });
     column.addEventListener('dragleave', () => column.classList.remove('drag-over'));
     column.addEventListener('drop', async event => {
-      event.preventDefault(); column.classList.remove('drag-over');
+      event.preventDefault();
+      column.classList.remove('drag-over');
       const taskId = event.dataTransfer.getData('text/plain');
       const task = state.weekTasks.find(item => item.id === taskId);
       if (!task || task.planned_date === iso) return;
       try {
         await apiRequest(`/api/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ planned_date: iso }) });
-        await Promise.all([refreshWeekTasks(), refreshTodayTasks()]); showToast(`任务已调整到${date.getMonth() + 1}月${date.getDate()}日`);
+        await Promise.all([refreshWeekTasks(), refreshTodayTasks()]);
+        showToast(`任务已调整到${date.getMonth() + 1}月${date.getDate()}日`);
       } catch (error) { showToast(error.message); }
     });
     board.append(column);
   });
-  const start = dates[0]; const end = dates[4];
+  const start = dates[0];
+  const end = dates[6];
+  const doneCount = state.weekTasks.filter(task => task.status === 'done').length;
+  const openCount = state.weekTasks.length - doneCount;
   $('#weekRange').textContent = `${start.getMonth() + 1}月${start.getDate()}日 — ${end.getMonth() + 1}月${end.getDate()}日`;
-  $('#weekSummary').textContent = `${state.weekTasks.length} 项计划 · ${state.weekTasks.filter(task => task.status === 'done').length} 项已完成`;
+  $('#weekSummary').textContent = `${state.weekTasks.length} 项计划（待办 ${openCount}）· ${events.length} 项日程 · 已完成 ${doneCount}`;
   $('#copyWeekButton').hidden = state.weekOffset !== 0;
 }
 
+function renderWeekBucketList(bucket) {
+  const board = $('#weekBoard');
+  board.replaceChildren();
+  const column = make('div', 'day-column week-bucket-column');
+  const head = make('header', 'day-column-head');
+  head.append(
+    make('strong', '', bucket === 'later' ? '以后' : '本周已完成'),
+    make('span', '', `${state.weekTasks.length} 项`),
+  );
+  column.append(head);
+  const list = make('div', 'day-tasks week-bucket-list');
+  state.weekTasks.forEach(task => {
+    const row = make('div', `week-bucket-row${task.status === 'done' ? ' is-done' : ''}`);
+    const body = make('button', 'week-bucket-body');
+    body.type = 'button';
+    body.append(
+      make('strong', '', task.title),
+      make('small', '', `${task.planned_date || '未排期'}${task.waiting_on ? ` · 等待 ${task.waiting_on}` : ''}`),
+    );
+    body.addEventListener('click', () => openEntityDrawer('task', task));
+    const doneBtn = make('button', `plan-done-btn${task.status === 'done' ? ' is-done' : ''}`, task.status === 'done' ? '恢复' : '完成');
+    doneBtn.type = 'button';
+    doneBtn.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        await toggleWeekTaskDone(task, task.status !== 'done');
+      } catch (error) { showToast(error.message); }
+    });
+    row.append(body, doneBtn);
+    list.append(row);
+  });
+  if (!state.weekTasks.length) {
+    list.append(make('p', 'empty-state', bucket === 'later' ? '暂无以后的任务' : '本周还没有已完成任务'));
+  }
+  column.append(list);
+  board.append(column);
+  $('#weekRange').textContent = bucket === 'later' ? '以后待办' : '本周已完成';
+  $('#weekSummary').textContent = `${state.weekTasks.length} 项`;
+  $('#copyWeekButton').hidden = true;
+}
+
 async function refreshWeekTasks() {
-  const dates = getWeekDates(state.weekOffset);
-  if (!state.apiAvailable) { state.weekTasks = []; renderWeekBoard(); return; }
+  const dates = getFullWeekDates(state.weekOffset);
+  if (!state.apiAvailable) {
+    state.weekTasks = [];
+    state.weekBoardEvents = [];
+    renderWeekBoard();
+    return;
+  }
   const bucket = state.weekBucket || 'current';
   if (bucket === 'later' || bucket === 'done') {
     const focus = await apiRequest(`/api/task-focus?bucket=${bucket}`);
     state.weekTasks = focus.tasks || [];
-    const board = $('#weekBoard');
-    board.replaceChildren();
-    const column = make('div', 'day-column');
-    column.append(make('header', '', null));
-    const head = make('header');
-    head.append(make('strong', '', bucket === 'later' ? '以后' : '本周已完成'), make('span', '', `${state.weekTasks.length} 项`));
-    column.replaceChildren(head);
-    const list = make('div', 'day-tasks');
-    state.weekTasks.forEach(task => {
-      const card = make('button', `task-card ${task.status}`);
-      card.type = 'button';
-      card.append(make('strong', '', task.title), make('small', '', `${task.planned_date || '未排期'}${task.waiting_on ? ` · 等待 ${task.waiting_on}` : ''}`));
-      card.addEventListener('click', () => openEntityDrawer('task', task));
-      list.append(card);
-    });
-    if (!state.weekTasks.length) list.append(make('p', 'empty-state', bucket === 'later' ? '暂无以后的任务' : '本周还没有已完成任务'));
-    column.append(list);
-    board.append(column);
-    $('#weekRange').textContent = bucket === 'later' ? '以后待办' : '本周已完成';
-    $('#weekSummary').textContent = `${state.weekTasks.length} 项`;
-    $('#copyWeekButton').hidden = true;
+    state.weekBoardEvents = [];
+    renderWeekBucketList(bucket);
     return;
   }
-  state.weekTasks = await apiRequest(`/api/tasks?date_from=${localIsoDate(dates[0])}&date_to=${localIsoDate(dates[4])}`);
+  const from = localIsoDate(dates[0]);
+  const to = localIsoDate(dates[6]);
+  const [tasks, events] = await Promise.all([
+    apiRequest(`/api/tasks?date_from=${from}&date_to=${to}`),
+    apiRequest(`/api/calendar/events?date_from=${from}&date_to=${to}`).catch(() => []),
+  ]);
+  state.weekTasks = Array.isArray(tasks) ? tasks : [];
+  state.weekBoardEvents = Array.isArray(events) ? events : [];
   renderWeekBoard();
   await refreshWeekReview();
+  if (state.weekOffset === 0 && !state._bootstrapping) refreshHomeWeekCalendar().catch(() => {});
 }
 
 function renderWeekReview() {
@@ -871,6 +1288,7 @@ function reportMarkdown(report = state.weeklyReport) {
 
 function renderWeeklyReport(report) {
   state.weeklyReport = report;
+  if (!$('#reportTitle')) return;
   $('#reportTitle').value = report.title || '';
   $('#reportExecutiveSummary').value = report.executive_summary || '';
   $('#reportHighlights').value = report.highlights || '';
@@ -888,11 +1306,15 @@ function renderWeeklyReport(report) {
   const sources = report.source_snapshot || {};
   const sourceCount = ['task_ids', 'request_ids', 'model_run_ids', 'project_ids', 'note_ids']
     .reduce((total, key) => total + (sources[key]?.length || 0), 0);
-  $('#reportSourceStatus').textContent = `已汇总 ${sourceCount} 条工作数据 · 数据快照 ${formatDate(sources.generated_at)}`;
+  if ($('#reportSourceStatus')) {
+    $('#reportSourceStatus').textContent = `已汇总 ${sourceCount} 条工作数据 · 数据快照 ${formatDate(sources.generated_at)}`;
+  }
   const statusLabel = report.status === 'final' ? '已定稿' : (report.saved ? '已保存草稿' : '自动草稿 · 尚未保存');
-  $('#reportSaveStatus').textContent = report.saved || report.status === 'final'
-    ? `${statusLabel} · ${formatDate(report.updated_at)}`
-    : statusLabel;
+  if ($('#reportSaveStatus')) {
+    $('#reportSaveStatus').textContent = report.saved || report.status === 'final'
+      ? `${statusLabel} · ${formatDate(report.updated_at)}`
+      : statusLabel;
+  }
   renderAiStatus();
   refreshReportVersions();
 }
@@ -924,10 +1346,14 @@ async function refreshReportVersions() {
 
 async function loadWeeklyReport() {
   const input = $('#reportWeekStart');
+  if (!input) return;
   if (!input.value) input.value = reportMonday();
   try {
     const template = currentReportTemplate();
-    if (!template || template.type === 'weekly') { state.currentGeneratedReportId = null; renderWeeklyReport(await apiRequest(`/api/weekly-reports/${input.value}`)); }
+    if (!template || template.type === 'weekly') {
+      state.currentGeneratedReportId = null;
+      renderWeeklyReport(await apiRequest(`/api/weekly-reports/${input.value}`));
+    }
   } catch (error) { showToast(error.message); }
 }
 
@@ -1048,129 +1474,90 @@ async function finalizeCurrentReport() {
   } catch (error) { showToast(error.message); }
 }
 
-$('#reportWeekStart').value = reportMonday();
-$('#reportWeekStart').addEventListener('change', event => {
-  event.target.value = reportMonday(event.target.value);
-  loadWeeklyReport();
-});
-$('#generateReportButton').addEventListener('click', generateWeeklyReport);
-$('#polishReportButton')?.addEventListener('click', polishWeeklyReport);
-$('#saveReportButton').addEventListener('click', () => saveWeeklyReport('draft', '保存草稿'));
-$('#finalizeReportButton').addEventListener('click', finalizeCurrentReport);
-$('#weeklyReportForm').addEventListener('submit', event => { event.preventDefault(); saveWeeklyReport('draft', '保存草稿'); });
-
-function currentReportTemplate() { return state.reportTemplates.find(item => item.id === $('#reportTemplate').value); }
+function currentReportTemplate() {
+  const select = $('#reportTemplate');
+  if (!select) return null;
+  return state.reportTemplates.find(item => item.id === select.value);
+}
 function renderReportTemplateOptions() {
-  const select = $('#reportTemplate'); select.replaceChildren(); state.reportTemplates.forEach(template => { const option = make('option', '', template.name); option.value = template.id; select.append(option); });
+  const select = $('#reportTemplate');
+  if (!select) return;
+  select.replaceChildren();
+  state.reportTemplates.forEach(template => {
+    const option = make('option', '', template.name);
+    option.value = template.id;
+    select.append(option);
+  });
   if (state.reportTemplates.some(template => template.id === 'RT-WEEKLY')) select.value = 'RT-WEEKLY';
   updateReportTemplateControls();
 }
 function updateReportTemplateControls() {
-  const template = currentReportTemplate(); const generic = template && template.type !== 'weekly';
-  $('#reportEndLabel').hidden = !generic; $('#reportEntityLabel').hidden = !template || !['project', 'model'].includes(template.type);
-  if (generic && !$('#reportEndDate').value) { const end = new Date(`${$('#reportWeekStart').value}T12:00:00`); end.setDate(end.getDate() + 6); $('#reportEndDate').value = localIsoDate(end); }
-  const entity = $('#reportRelatedEntity'); entity.replaceChildren(); const source = template?.type === 'project' ? state.projects : template?.type === 'model' ? state.models : [];
-  source.forEach(item => { const option = make('option', '', `${item.id} · ${item.name}`); option.value = item.id; entity.append(option); });
-  const labels = template?.section_labels || {}; const headings = $$('.report-section-card h2'); if (headings.length === 3) [labels.highlights || '完成与进展', labels.risks || '阻塞与风险', labels.next_plan || '下周计划'].forEach((value, index) => { headings[index].textContent = value; });
+  if (!$('#reportTemplate')) return;
+  const template = currentReportTemplate();
+  const generic = template && template.type !== 'weekly';
+  if ($('#reportEndLabel')) $('#reportEndLabel').hidden = !generic;
+  if ($('#reportEntityLabel')) $('#reportEntityLabel').hidden = !template || !['project', 'model'].includes(template.type);
+  if (generic && $('#reportEndDate') && !$('#reportEndDate').value && $('#reportWeekStart')?.value) {
+    const end = new Date(`${$('#reportWeekStart').value}T12:00:00`);
+    end.setDate(end.getDate() + 6);
+    $('#reportEndDate').value = localIsoDate(end);
+  }
+  const entity = $('#reportRelatedEntity');
+  if (!entity) return;
+  entity.replaceChildren();
+  const source = template?.type === 'project' ? state.projects : template?.type === 'model' ? state.models : [];
+  source.forEach(item => {
+    const option = make('option', '', `${item.id} · ${item.name}`);
+    option.value = item.id;
+    entity.append(option);
+  });
+  const labels = template?.section_labels || {};
+  const headings = $$('.report-section-card h2');
+  if (headings.length === 3) {
+    [labels.highlights || '完成与进展', labels.risks || '阻塞与风险', labels.next_plan || '下周计划']
+      .forEach((value, index) => { headings[index].textContent = value; });
+  }
 }
 function renderGenericReport(report) {
+  if (!$('#weeklyReportForm')) return;
   state.currentGeneratedReportId = report.id || null;
-  renderWeeklyReport({ ...report, week_start: report.period_start, executive_summary: report.sections?.summary || '', highlights: report.sections?.highlights || '', risks: report.sections?.risks || '', next_week_plan: report.sections?.next_plan || '', saved: !!report.saved });
+  renderWeeklyReport({
+    ...report,
+    week_start: report.period_start,
+    executive_summary: report.sections?.summary || '',
+    highlights: report.sections?.highlights || '',
+    risks: report.sections?.risks || '',
+    next_week_plan: report.sections?.next_plan || '',
+    saved: !!report.saved,
+  });
 }
 function renderGenericReportHistory() {
-  const list = $('#genericReportHistory'); list.replaceChildren(); state.genericReports.slice(0, 20).forEach(report => {
-    const row = make('div'); const copy = make('span'); copy.append(make('strong', '', report.title), make('small', '', `${report.type} · ${report.period_start || '未设置周期'}`));
-    const actions = make('div', 'history-actions'); const open = make('button', 'text-button', '打开'); open.type = 'button';
-    open.addEventListener('click', async () => { try { const detail = await apiRequest(`/api/reports/${report.id}`); $('#reportTemplate').value = detail.template_id; updateReportTemplateControls(); $('#reportWeekStart').value = detail.period_start || reportMonday(); $('#reportEndDate').value = detail.period_end || ''; $('#reportRelatedEntity').value = detail.related_entity_id || ''; renderGenericReport(detail); } catch (error) { showToast(error.message); } });
-    const word = make('button', 'text-button', 'Word'); word.type = 'button'; word.addEventListener('click', () => downloadData(`/api/reports/${report.id}/docx`));
-    const pdf = make('button', 'text-button', 'PDF'); pdf.type = 'button'; pdf.addEventListener('click', () => downloadData(`/api/reports/${report.id}/pdf`));
-    const remove = make('button', 'text-button danger-text', '删除'); remove.type = 'button'; remove.addEventListener('click', async () => { if (!window.confirm(`确认删除“${report.title}”吗？`)) return; try { await apiRequest(`/api/reports/${report.id}`, { method: 'DELETE' }); if (state.currentGeneratedReportId === report.id) state.currentGeneratedReportId = null; state.genericReports = await apiRequest('/api/reports'); renderGenericReportHistory(); showToast('报告已删除'); } catch (error) { showToast(error.message); } });
-    actions.append(open, word, pdf, remove); row.append(make('time', '', formatDate(report.updated_at).slice(0, 10)), copy, actions); list.append(row);
-  }); if (!state.genericReports.length) list.append(make('p', 'empty-state', '暂无模板报告'));
+  const list = $('#genericReportHistory');
+  if (!list) return;
+  list.replaceChildren();
+  state.genericReports.slice(0, 20).forEach(report => {
+    const row = make('div');
+    const copy = make('span');
+    copy.append(make('strong', '', report.title), make('small', '', `${report.type} · ${report.period_start || '未设置周期'}`));
+    row.append(make('time', '', formatDate(report.updated_at).slice(0, 10)), copy);
+    list.append(row);
+  });
+  if (!state.genericReports.length) list.append(make('p', 'empty-state', '暂无模板报告'));
 }
-$('#reportTemplate').addEventListener('change', () => { state.currentGeneratedReportId = null; updateReportTemplateControls(); loadWeeklyReport(); });
-$('#copyReportButton').addEventListener('click', async () => {
-  const content = reportMarkdown();
-  try { await navigator.clipboard.writeText(content); showToast('报告全文已复制'); }
-  catch (_) {
-    const helper = make('textarea'); helper.value = content; document.body.append(helper); helper.select(); document.execCommand('copy'); helper.remove(); showToast('报告全文已复制');
-  }
-});
-$('#downloadReportButton').addEventListener('click', () => {
-  const content = reportMarkdown();
-  const url = URL.createObjectURL(new Blob([content], { type: 'text/markdown;charset=utf-8' }));
-  const anchor = document.createElement('a'); anchor.href = url; anchor.download = `weekly-report-${$('#reportWeekStart').value}.md`; document.body.append(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
-});
 function downloadFormattedReport(format) {
   const template = currentReportTemplate();
-  if (!template || template.type === 'weekly') { downloadData(`/api/weekly-reports/${$('#reportWeekStart').value}/${format}`); return; }
-  if (!state.currentGeneratedReportId) { showToast('请先保存模板报告，再下载 Word 或 PDF'); return; }
+  if (!template || template.type === 'weekly') {
+    downloadData(`/api/weekly-reports/${$('#reportWeekStart')?.value}/${format}`);
+    return;
+  }
+  if (!state.currentGeneratedReportId) {
+    showToast('请先保存模板报告，再下载 Word 或 PDF');
+    return;
+  }
   downloadData(`/api/reports/${state.currentGeneratedReportId}/${format}`);
 }
-$('#downloadReportDocxButton').addEventListener('click', () => downloadFormattedReport('docx'));
-$('#downloadReportPdfButton').addEventListener('click', () => downloadFormattedReport('pdf'));
-
-function setReportTemplateEditor(template = null) {
-  const builtin = !!template?.is_builtin;
-  $('#reportTemplateForm').reset(); $('#reportTemplateId').value = template?.id || '';
-  $('#reportTemplateName').value = template?.name || ''; $('#reportTemplateType').value = template?.type || 'custom';
-  $('#reportTemplateDescription').value = template?.description || '';
-  const labels = template?.section_labels || {};
-  $('#reportLabelSummary').value = labels.summary || '总体概览'; $('#reportLabelHighlights').value = labels.highlights || '完成与进展';
-  $('#reportLabelRisks').value = labels.risks || '阻塞与风险'; $('#reportLabelNext').value = labels.next_plan || '后续计划';
-  const cover = template?.cover || {};
-  $('#reportCoverEnabled').checked = !!cover.enabled;
-  $('#reportCoverOrg').value = cover.org_name || '审计监察部';
-  $('#reportCoverSubtitle').value = cover.subtitle || '内部工作报告';
-  $('#reportCoverFooter').value = cover.footer || '内部资料 · 请复核后使用';
-  ['reportTemplateName', 'reportTemplateType', 'reportTemplateDescription', 'reportLabelSummary', 'reportLabelHighlights', 'reportLabelRisks', 'reportLabelNext', 'reportCoverEnabled', 'reportCoverOrg', 'reportCoverSubtitle', 'reportCoverFooter'].forEach(id => { $(`#${id}`).disabled = builtin; });
-  $('#saveReportTemplateButton').hidden = builtin; $('#deleteReportTemplateButton').hidden = !template || builtin;
-  $('#reportTemplateHint').textContent = builtin ? '这是内置模板，仅供查看。需要调整时请新建自定义模板。' : '自定义模板可编辑和删除；封面设置会写入 Word/PDF 导出。';
-}
-
-function renderReportTemplateManager() {
-  const list = $('#reportTemplateList'); list.replaceChildren();
-  state.reportTemplates.forEach(template => { const row = make('button', 'template-list-item'); row.type = 'button'; const copy = make('span'); copy.append(make('strong', '', template.name), make('small', '', template.description || '未填写用途说明')); row.append(copy, make('em', '', template.is_builtin ? '内置' : '自定义')); row.addEventListener('click', () => setReportTemplateEditor(template)); list.append(row); });
-}
-
-$('#manageReportTemplatesButton').addEventListener('click', () => { renderReportTemplateManager(); setReportTemplateEditor(); openModal($('#reportTemplateModal')); });
-$('#newReportTemplateButton').addEventListener('click', () => setReportTemplateEditor());
-$('#exportReportTemplatesButton').addEventListener('click', () => downloadData('/api/report-templates/export'));
-$('#importReportTemplatesFile').addEventListener('change', async event => {
-  const [file] = event.target.files; event.target.value = '';
-  if (!file) return;
-  try {
-    const packageData = JSON.parse(await file.text());
-    const templates = packageData.templates || packageData;
-    const result = await apiRequest('/api/report-templates/import', { method: 'POST', body: JSON.stringify({ templates, mode: 'merge' }) });
-    state.reportTemplates = await apiRequest('/api/report-templates'); renderReportTemplateOptions(); renderReportTemplateManager();
-    showToast(`已导入 ${result.imported} 个模板`);
-  } catch (error) { showToast(error.message); }
-});
-$('#reportTemplateForm').addEventListener('submit', async event => {
-  event.preventDefault(); const id = $('#reportTemplateId').value;
-  const payload = {
-    name: $('#reportTemplateName').value.trim(),
-    type: $('#reportTemplateType').value,
-    description: $('#reportTemplateDescription').value.trim(),
-    section_labels: { summary: $('#reportLabelSummary').value.trim(), highlights: $('#reportLabelHighlights').value.trim(), risks: $('#reportLabelRisks').value.trim(), next_plan: $('#reportLabelNext').value.trim() },
-    cover: {
-      enabled: $('#reportCoverEnabled').checked,
-      org_name: $('#reportCoverOrg').value.trim(),
-      subtitle: $('#reportCoverSubtitle').value.trim(),
-      footer: $('#reportCoverFooter').value.trim(),
-    },
-  };
-  try {
-    const saved = await apiRequest(id ? `/api/report-templates/${id}` : '/api/report-templates', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
-    state.reportTemplates = await apiRequest('/api/report-templates'); renderReportTemplateOptions(); renderReportTemplateManager(); setReportTemplateEditor(saved); $('#reportTemplate').value = saved.id; updateReportTemplateControls(); showToast(id ? '模板已更新' : '自定义模板已创建');
-  } catch (error) { showToast(error.message); }
-});
-$('#deleteReportTemplateButton').addEventListener('click', async () => {
-  const id = $('#reportTemplateId').value; if (!id || !window.confirm('确认删除这个自定义模板吗？')) return;
-  try { await apiRequest(`/api/report-templates/${id}`, { method: 'DELETE' }); state.reportTemplates = await apiRequest('/api/report-templates'); renderReportTemplateOptions(); renderReportTemplateManager(); setReportTemplateEditor(); showToast('模板已删除'); }
-  catch (error) { showToast(error.message); }
-});
+function setReportTemplateEditor() {}
+function renderReportTemplateManager() {}
 
 const overlay = $('#overlay');
 const drawer = $('#sqlDrawer');
@@ -1202,6 +1589,40 @@ function addDetailSection(title, description = '', rows = []) {
     row.append(make('span', '', label), make('strong', '', value || '未设置'));
     section.append(row);
   });
+  $('#entityDetailContent').append(section);
+}
+
+function addRequestSqlSection(item) {
+  const section = make('section', 'entity-detail-section request-sql-detail');
+  const head = make('div', 'section-title');
+  head.append(make('h3', '', 'SQL 代码记录'));
+  const sql = String(item.sql_text || '').trim();
+  if (sql) {
+    const copy = make('button', 'copy-button');
+    copy.type = 'button';
+    copy.append(document.createTextNode('复制 SQL'));
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(item.sql_text || '');
+        showToast('SQL 已复制');
+      } catch (_) { showToast('复制失败，请手动选择文本'); }
+    });
+    head.append(copy);
+  }
+  section.append(head);
+  if (!sql) {
+    section.append(make('p', 'entity-detail-copy', '尚未记录本次取数 SQL。编辑请求时可粘贴保存。'));
+  } else {
+    const shell = make('div', 'sql-code-shell');
+    const chrome = make('div', 'sql-code-chrome');
+    chrome.append(make('span', ''), make('span', ''), make('span', ''), make('em', '', 'request.sql'));
+    const pre = make('pre', 'sql-code');
+    const code = document.createElement('code');
+    code.textContent = item.sql_text || '';
+    pre.append(code);
+    shell.append(chrome, pre);
+    section.append(shell);
+  }
   $('#entityDetailContent').append(section);
 }
 
@@ -1243,13 +1664,33 @@ function addRequestRelationSection(item) {
   $('#entityDetailContent').append(section);
 }
 
+function formatCalendarEventWhen(event) {
+  const start = String(event?.start_at || '');
+  const end = String(event?.end_at || '');
+  const day = start.slice(0, 10);
+  if (event?.all_day || (!start.includes('T') && day)) {
+    if (end && end.slice(0, 10) && end.slice(0, 10) !== day) {
+      return `${day} – ${end.slice(0, 10)} · 全天`;
+    }
+    return `${day || '未安排'} · 全天`;
+  }
+  const startTime = start.slice(11, 16);
+  const endTime = end.slice(11, 16);
+  if (startTime && endTime) return `${day} ${startTime} – ${endTime}`;
+  if (startTime) return `${day} ${startTime}`;
+  return day || formatDate(start) || '未安排';
+}
+
 function openEntityDrawer(type, item) {
   if (!item) return;
   closeDrawer();
   state.currentDetail = { type, item };
   $('#entityDetailSummary').replaceChildren();
   $('#entityDetailContent').replaceChildren();
-  $('#deleteEntityDetailButton').hidden = false;
+  const editBtn = $('#editEntityDetailButton');
+  const deleteBtn = $('#deleteEntityDetailButton');
+  if (editBtn) editBtn.hidden = false;
+  if (deleteBtn) deleteBtn.hidden = false;
 
   if (type === 'task') {
     const taskStatuses = { todo: '待处理', doing: '进行中', done: '已完成', blocked: '受阻' };
@@ -1279,6 +1720,7 @@ function openEntityDrawer(type, item) {
     addDetailSummary('提出时间', formatDate(item.created_at).slice(0, 10));
     addDetailSection('数据范围', item.scope || '暂未填写数据范围。');
     addDetailSection('口径说明', item.caliber_notes || '暂未填写统计口径。');
+    addRequestSqlSection(item);
     addDetailSection('推进信息', '', [
       ['用途 / 项目', item.purpose || '未填写'],
       ['下一步', item.next_action || '待安排'],
@@ -1304,6 +1746,22 @@ function openEntityDrawer(type, item) {
       ['归档', item.isArchived ? '是' : '否'],
       ['记录编号', item.id],
       ['创建时间', formatDate(item.createdAt)],
+    ]);
+  } else if (type === 'calendar_event') {
+    if (editBtn) editBtn.hidden = true;
+    if (deleteBtn) deleteBtn.hidden = true;
+    const sourceLabel = item.source === 'caldav' ? 'CalDAV' : item.source === 'ics' ? 'ICS' : (item.source || '日历');
+    $('#entityDetailEyebrow').textContent = `CALENDAR / ${item.id || item.external_id || 'EVENT'}`;
+    $('#entityDetailTitle').textContent = item.title || '未命名日程';
+    addDetailSummary('时间', formatCalendarEventWhen(item));
+    addDetailSummary('地点', item.location || '未填写');
+    addDetailSummary('来源', sourceLabel);
+    addDetailSection('日程说明', item.description || '暂无详细说明。');
+    addDetailSection('同步信息', '', [
+      ['外部编号', item.external_id || '无'],
+      ['订阅编号', item.subscription_id || '无'],
+      ['开始', item.start_at || '未设置'],
+      ['结束', item.end_at || '未设置'],
     ]);
   } else {
     return;
@@ -1725,6 +2183,9 @@ function renderSavedNotes() {
     const searchMatch = !query || `${note.title} ${note.content} ${(note.tags || []).join(' ')}`.toLowerCase().includes(query);
     return scopeMatch && categoryMatch && searchMatch;
   });
+  const countHint = $('#notesResultHint');
+  if (countHint) countHint.textContent = items.length ? `${items.length} 条记录` : '无匹配记录';
+
   items.forEach(note => {
     const article = make('article', 'saved-note');
     article.tabIndex = 0;
@@ -1742,19 +2203,21 @@ function renderSavedNotes() {
     });
     select.append(checkbox);
     headerLeft.append(select, make('span', 'note-type', note.type));
-    if (note.isFavorite) headerLeft.append(make('span', 'note-type', '收藏'));
-    if (note.isArchived) headerLeft.append(make('span', 'note-type', '归档'));
+    if (note.isFavorite) headerLeft.append(make('span', 'note-type is-fav', '收藏'));
+    if (note.isArchived) headerLeft.append(make('span', 'note-type is-archived', '归档'));
     header.append(headerLeft, make('time', '', formatDate(note.createdAt)));
     const title = make('h2', '', note.title);
-    const content = make('div', 'note-markdown');
+    const content = make('div', 'note-markdown note-excerpt');
     content.innerHTML = renderMarkdown(note.content || '暂未补充详细内容。');
     const footer = make('footer');
-    (note.tags.length ? note.tags : ['个人记录']).forEach(tag => footer.append(make('span', '', `#${tag}`)));
-    if (note.relation) footer.append(make('b', '', `关联 ${note.relation}`));
+    const tagRow = make('div', 'note-tag-row');
+    (note.tags.length ? note.tags : ['个人记录']).forEach(tag => tagRow.append(make('span', '', `#${tag}`)));
+    if (note.relation) tagRow.append(make('b', '', `关联 ${note.relation}`));
     const actions = make('div', 'note-actions');
     const edit = make('button', '', '编辑'); edit.type = 'button'; edit.addEventListener('click', () => openRecord(note));
     const remove = make('button', 'delete-note', '删除'); remove.type = 'button'; remove.addEventListener('click', () => deleteNote(note.id));
-    actions.append(edit, remove); footer.append(actions);
+    actions.append(edit, remove);
+    footer.append(tagRow, actions);
     article.append(header, title, content, footer);
     article.addEventListener('click', event => {
       if (event.target.closest('button, input, label')) return;
@@ -1766,6 +2229,7 @@ function renderSavedNotes() {
     feed.append(article);
   });
   if (!items.length) feed.append(make('p', 'empty-state', '没有符合条件的工作记录'));
+  renderTodayNotesHome();
 }
 
 function renderNoteFilters() {
@@ -1896,6 +2360,7 @@ function openRequestForm(request = null) {
   if ($('#requestDeliveryMethod')) $('#requestDeliveryMethod').value = request?.delivery_method || '';
   if ($('#requestDeliveryLocation')) $('#requestDeliveryLocation').value = request?.delivery_location || '';
   if ($('#requestSensitiveNotes')) $('#requestSensitiveNotes').value = request?.sensitive_notes || '';
+  if ($('#requestSqlText')) $('#requestSqlText').value = request?.sql_text || '';
   $('#deleteRequestButton').hidden = !request;
   openModal($('#requestModal'));
   setTimeout(() => $('#requestTitle').focus(), 20);
@@ -1966,7 +2431,7 @@ async function refreshRequests() {
   if (q) params.set('q', q);
   const query = params.toString();
   state.requests = await apiRequest(`/api/data-requests${query ? `?${query}` : ''}`);
-  state.selectedRequests.clear(); renderRequests(); renderTodayRequests(); updateBatchButtons();
+  state.selectedRequests.clear(); renderRequests(); renderTodayRequests(); updateBatchButtons(); updateNavCounts();
 }
 
 async function deleteRequest(id) {
@@ -2009,11 +2474,21 @@ $('#requestForm').addEventListener('submit', async event => {
     delivery_method: $('#requestDeliveryMethod')?.value.trim() || '',
     delivery_location: $('#requestDeliveryLocation')?.value.trim() || '',
     sensitive_notes: $('#requestSensitiveNotes')?.value.trim() || '',
+    sql_text: $('#requestSqlText')?.value || '',
   };
   try {
     await apiRequest(id ? `/api/data-requests/${id}` : '/api/data-requests', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
     closeModal($('#requestModal')); await refreshRequests(); showToast(id ? '数据请求已更新' : '数据请求已创建');
   } catch (error) { showToast(error.message); }
+});
+
+$('#copyRequestSql')?.addEventListener('click', async () => {
+  const text = $('#requestSqlText')?.value || '';
+  if (!text.trim()) { showToast('暂无 SQL 可复制'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('SQL 已复制');
+  } catch (_) { showToast('复制失败，请手动选择文本'); }
 });
 
 async function batchRequest(path, success) {
@@ -2083,9 +2558,35 @@ $('#applySqlAssist').addEventListener('click', () => {
   showToast('SQL 说明建议已填入，请确认后保存');
 });
 
+function renderSqlSummary() {
+  const root = $('#sqlSummary');
+  if (!root) return;
+  const all = state.sqlAssets || [];
+  const validated = all.filter(item => item.status === 'validated').length;
+  const draft = all.filter(item => item.status === 'draft').length;
+  const archived = all.filter(item => item.status === 'archived').length;
+  const reuse = all.reduce((sum, item) => sum + (item.reuse_count || 0), 0);
+  root.replaceChildren();
+  [
+    [all.length, '全部资产'],
+    [validated, '已验证'],
+    [draft, '草稿'],
+    [reuse, '累计复用'],
+  ].forEach(([value, label]) => {
+    const cell = make('div');
+    cell.append(make('strong', '', String(value)), make('span', '', label));
+    root.append(cell);
+  });
+  if (archived) {
+    const hint = make('p', '', `另有 ${archived} 条已归档`);
+    root.append(hint);
+  }
+}
+
 function renderSqlAssets() {
   const rows = $('#sqlRows'); rows.replaceChildren();
   const query = $('#sqlSearch').value.trim().toLowerCase();
+  renderSqlSummary();
   renderSqlCategoryFilters();
   const selectedStatuses = new Set($$('.sql-status-filter:checked').map(input => input.value));
   const items = state.sqlAssets.filter(item => {
@@ -2103,30 +2604,34 @@ function renderSqlAssets() {
     checkLabel.append(check);
     const meta = make('div', 'sql-asset-meta');
     const head = make('header');
-    head.append(make('strong', '', item.name), make('small', '', `${item.id} · ${item.purpose || '暂无用途说明'}`));
+    head.append(make('strong', '', item.name));
     meta.append(head);
-    if ((item.tags || []).length) {
+    meta.append(make('p', 'sql-asset-purpose', item.purpose || '暂无用途说明'));
+    if ((item.tags || []).length || (item.table_names || []).length) {
       const tags = make('div', 'sql-tags');
       (item.tags || []).slice(0, 4).forEach(tag => tags.append(make('i', '', tag)));
+      (item.table_names || []).slice(0, 2).forEach(table => tags.append(make('i', 'is-table', table)));
       meta.append(tags);
     }
     const side = make('div', 'sql-asset-side');
     const status = sqlStatus[item.status] || [item.status, 'waiting'];
     side.append(
       make('span', `status ${status[1]}`, status[0]),
-      make('span', '', `${item.current_version} · ${(item.table_names || []).length} 张表`),
+      make('span', '', item.current_version || 'v1.0'),
       make('span', '', `${formatDate(item.updated_at).slice(0, 10)} · 复用 ${item.reuse_count || 0}`),
     );
     const previewSource = String(item.sql_text || '')
       .replace(/\r\n/g, '\n')
       .split('\n')
       .filter(line => line.trim())
-      .slice(0, 7)
+      .slice(0, 6)
       .join('\n') || '-- 暂无 SQL 文本';
     const preview = make('pre', 'sql-preview');
+    const chrome = make('div', 'sql-preview-chrome');
+    chrome.append(make('span', ''), make('span', ''), make('span', ''), make('em', '', item.id || 'query.sql'));
     const code = make('code');
     code.innerHTML = highlightSql(previewSource);
-    preview.append(code);
+    preview.append(chrome, code);
     card.append(checkLabel, meta, side, preview);
     card.addEventListener('click', () => openSqlDrawer(item.id));
     rows.append(card);
@@ -2149,7 +2654,7 @@ function renderSqlCategoryFilters() {
 
 async function refreshSqlAssets() {
   state.sqlAssets = await apiRequest('/api/sql-assets');
-  state.selectedSql.clear(); renderSqlAssets(); updateBatchButtons();
+  state.selectedSql.clear(); renderSqlAssets(); renderTodaySqlHome(); updateBatchButtons();
 }
 
 async function deleteSql(id) {
@@ -2251,19 +2756,25 @@ $$('[data-model-tab]').forEach(button => button.addEventListener('click', () => 
   $$('.model-tab').forEach(tab => tab.classList.toggle('active', tab.id === `model-tab-${button.dataset.modelTab}`));
 }));
 function renderModelCards() {
-  const grid = $('#modelCards'); grid.replaceChildren();
+  const grid = $('#modelCards');
+  if (!grid) return;
+  grid.replaceChildren();
+  if (!state.models.length) {
+    grid.append(make('p', 'empty-state', '还没有监测模型。创建后可在此查看运行状态与维护步骤。'));
+    return;
+  }
   state.models.forEach(model => {
     const card = make('button', 'model-card'); card.type = 'button'; card.dataset.modelId = model.id;
     card.classList.toggle('active', state.currentModel?.id === model.id);
     const header = make('header');
     const identity = make('span'); identity.append(make('strong', '', model.name), make('small', '', `${model.id} · ${model.schedule || '未设置调度'}`));
-    const status = model.status === 'normal' ? ['运行正常', 'done'] : ['待更新', 'waiting'];
+    const status = model.status === 'normal' ? ['运行正常', 'done'] : model.status === 'paused' ? ['已暂停', 'waiting'] : ['待更新', 'waiting'];
     header.append(make('span', 'model-icon', 'M'), identity, make('em', `status ${status[1]}`, status[0]));
     const metrics = make('div', 'model-metrics');
     [['本次命中', model.hit_count], ['待复核', model.pending_review_count], ['当前版本', model.current_version]].forEach(([label, value]) => {
       const metric = make('span'); metric.append(make('b', '', value), document.createTextNode(label)); metrics.append(metric);
     });
-    const footer = make('footer'); footer.append(make('span', '', `最近运行 ${formatDate(model.last_run_at)}`), make('span', '', model.purpose));
+    const footer = make('footer'); footer.append(make('span', '', `最近运行 ${formatDate(model.last_run_at)}`), make('span', '', model.purpose || '暂无用途说明'));
     card.append(header, metrics, footer);
     card.addEventListener('click', () => selectModel(model)); grid.append(card);
   });
@@ -2352,7 +2863,7 @@ function parseModelLines(value, type) {
 }
 
 async function refreshModels(selectedId = null) {
-  state.models = await apiRequest('/api/models'); renderModelCards();
+  state.models = await apiRequest('/api/models'); renderModelCards(); renderTodayModelsHome(); updateNavCounts();
   const selected = state.models.find(model => model.id === selectedId) || state.models[0];
   if (selected) await selectModel(selected);
   else state.currentModel = null;
@@ -2416,153 +2927,433 @@ $('#modelRunForm').addEventListener('submit', async event => {
   } catch (error) { showToast(error.message); }
 });
 
+const LEDGER_CATEGORY_ORDER = ['员工监管类', '经销商监管类', '合作商监管类', 'AI助力管理类'];
+
+async function refreshProjects() {
+  state.projects = await apiRequest('/api/projects');
+  renderProjects();
+  renderTodayProjects();
+}
+
 function renderProjects() {
-  const board = $('#projectBoard'); board.replaceChildren();
-  state.projects.forEach(project => {
-    const card = make('article'); card.tabIndex = 0; card.setAttribute('role', 'button'); card.setAttribute('aria-label', `查看项目 ${project.name} 的详情`);
-    const header = make('header'); header.append(make('span', '', `${project.type.toUpperCase()} 项目`), make('em', 'status working', project.status === 'active' ? '进行中' : project.status));
-    const meta = make('div', 'project-meta');
-    [['计划结束', project.due_date || '未设置'], ['关联资产', `${project.relation_count || 0} 项`], ['完成度', `${project.progress}%`]].forEach(([label, value]) => {
-      const item = make('span'); item.append(make('small', '', label), document.createTextNode(value)); meta.append(item);
+  const board = $('#projectBoard');
+  if (!board) return;
+  board.replaceChildren();
+  const items = filteredLedgerProjects();
+  const hint = $('#ledgerResultHint');
+  if (hint) hint.textContent = `${items.length} 项`;
+  if (!items.length) {
+    board.append(make('p', 'empty-state', state.projects.length
+      ? '当前筛选下没有监管项。'
+      : '台账为空。可点击「新增监管项」补录，或确认后端种子已写入。'));
+    return;
+  }
+  const groups = new Map();
+  items.forEach(project => {
+    const key = project.category || '其他';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(project);
+  });
+  const orderedKeys = [
+    ...LEDGER_CATEGORY_ORDER.filter(key => groups.has(key)),
+    ...[...groups.keys()].filter(key => !LEDGER_CATEGORY_ORDER.includes(key)),
+  ];
+  orderedKeys.forEach(category => {
+    const section = make('section', 'soft-ledger-section');
+    const title = make('div', 'soft-ledger-section-head');
+    title.append(make('h2', '', category), make('span', '', `${groups.get(category).length} 项`));
+    const grid = make('div', 'soft-ledger-grid');
+    groups.get(category).forEach(project => {
+      const card = make('article', 'soft-ledger-card');
+      card.tabIndex = 0;
+      card.setAttribute('role', 'button');
+      card.setAttribute('aria-label', `查看监管项 ${project.name}`);
+      const status = ledgerStatusLabel(project.status);
+      const header = make('header');
+      header.append(
+        make('span', 'soft-ledger-cycle', ledgerCycleLabel(project.monitor_cycle)),
+        make('em', `status ${status[1]}`, status[0]),
+      );
+      const latest = project.latest_execution;
+      const meta = make('div', 'project-meta soft-ledger-meta');
+      [
+        ['最近执行', latest ? `${ledgerExecLabel(latest.result)} · ${(latest.executed_at || '').slice(0, 10) || '—'}` : '尚未登记'],
+        ['待办步骤', `${project.pending_steps || 0}`],
+        ['关联资产', `${project.relation_count || 0}`],
+      ].forEach(([label, value]) => {
+        const item = make('span');
+        item.append(make('small', '', label), document.createTextNode(value));
+        meta.append(item);
+      });
+      const footer = make('footer');
+      footer.append(make('span', '', '下一步'), make('strong', '', project.next_action || '待安排'));
+      card.append(
+        header,
+        make('h3', '', project.name),
+        make('p', '', project.goal || project.plan_detail || '暂未填写规划摘要。'),
+        meta,
+        footer,
+      );
+      card.addEventListener('click', () => openProjectRelations(project));
+      card.addEventListener('keydown', event => { if (event.key === 'Enter') openProjectRelations(project); });
+      grid.append(card);
     });
-    const progress = make('div', 'progress'); const bar = make('i'); bar.style.width = `${project.progress}%`; progress.append(bar);
-    const footer = make('footer'); footer.append(make('span', '', '下一步'), make('strong', '', project.next_action || '待安排'));
-    card.append(header, make('h2', '', project.name), make('p', '', project.goal), meta, progress, footer);
-    card.addEventListener('click', () => openProjectRelations(project));
-    card.addEventListener('keydown', event => { if (event.key === 'Enter') openProjectRelations(project); });
-    board.append(card);
+    section.append(title, grid);
+    board.append(section);
+  });
+}
+
+function setLedgerDetailTab(tab) {
+  state.ledgerDetailTab = tab || 'overview';
+  $$('#ledgerDetailTabs [data-ledger-tab]').forEach(button => {
+    const active = button.dataset.ledgerTab === state.ledgerDetailTab;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  $$('#projectRelationModal [data-ledger-panel]').forEach(panel => {
+    panel.hidden = panel.dataset.ledgerPanel !== state.ledgerDetailTab;
   });
 }
 
 async function openProjectRelations(project) {
   try {
     const data = await apiRequest(`/api/projects/${project.id}`);
-    state.currentProject = data.project; $('#relationProjectId').value = data.project.id;
-    $('#projectRelationTitle').textContent = `${data.project.name} · 项目详情`;
+    state.currentProject = data.project;
+    state.ledgerDetail = data;
+    $('#relationProjectId').value = data.project.id;
+    $('#projectRelationTitle').textContent = data.project.name;
     renderProjectDetail(data);
-    renderProjectRelations(data.relations); openModal($('#projectRelationModal'));
+    renderProjectRelations(data.relations || []);
+    renderLedgerSteps(data.update_steps || []);
+    renderLedgerExecutions(data.executions || []);
+    setLedgerDetailTab(state.ledgerDetailTab || 'overview');
+    openModal($('#projectRelationModal'));
   } catch (error) { showToast(error.message); }
 }
 
 function renderProjectDetail(data) {
-  const project = data.project; const summary = $('#projectDetailSummary'); summary.replaceChildren();
-  [['项目进度', `${project.progress}%`], ['直接任务', `${project.task_done} / ${project.task_total}`], ['数据请求', project.request_total], ['关联资产', project.relation_count]].forEach(([label, value]) => {
-    const item = make('div'); item.append(make('span', '', label), make('strong', '', value)); summary.append(item);
+  const project = data.project;
+  const summary = $('#projectDetailSummary');
+  summary.replaceChildren();
+  const latest = project.latest_execution;
+  [
+    ['分类', project.category || '—'],
+    ['周期', ledgerCycleLabel(project.monitor_cycle)],
+    ['待办步骤', `${project.pending_steps || 0}`],
+    ['最近执行', latest ? ledgerExecLabel(latest.result) : '尚未登记'],
+    ['关联资产', `${project.relation_count || 0}`],
+  ].forEach(([label, value]) => {
+    const item = make('div');
+    item.append(make('span', '', label), make('strong', '', String(value)));
+    summary.append(item);
   });
-  $('#projectGoal').value = project.goal || '';
   $('#projectName').value = project.name || '';
-  $('#projectType').value = project.type || '';
+  $('#projectCategory').value = project.category || '员工监管类';
   $('#projectStatus').value = project.status || 'active';
-  $('#projectProgress').value = project.progress;
-  $('#projectDueDate').value = project.due_date || '';
+  $('#projectCycle').value = project.monitor_cycle || '按需';
+  $('#projectSortOrder').value = project.sort_order ?? 0;
+  $('#projectCycleNote').value = project.cycle_note || '';
   $('#projectNextAction').value = project.next_action || '';
+  $('#projectGoal').value = project.goal || '';
+  $('#projectPlanDetail').value = project.plan_detail || '';
+  $('#projectMonitorLogic').value = project.monitor_logic || '';
+  $('#projectCodeNote').value = project.code_note || '';
+  $('#projectCodeBackup').value = project.code_backup || '';
 }
 
-$('#saveProjectButton').addEventListener('click', async () => {
+function renderLedgerSteps(steps) {
+  const list = $('#ledgerStepList');
+  if (!list) return;
+  list.replaceChildren();
+  if (!steps.length) {
+    list.append(make('p', 'empty-state', '暂无更新步骤。添加后可勾选完成。'));
+    return;
+  }
+  steps.forEach(step => {
+    const row = make('div', `soft-ledger-step${step.status === 'done' ? ' is-done' : ''}`);
+    const check = make('input');
+    check.type = 'checkbox';
+    check.checked = step.status === 'done';
+    check.addEventListener('change', async () => {
+      try {
+        await apiRequest(`/api/projects/${state.currentProject.id}/steps/${step.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: check.checked ? 'done' : 'pending' }),
+        });
+        await openProjectRelations(state.currentProject);
+        await refreshProjects();
+        showToast(check.checked ? '步骤已完成' : '步骤已重开');
+      } catch (error) { showToast(error.message); check.checked = !check.checked; }
+    });
+    const copy = make('div');
+    copy.append(make('strong', '', step.title), make('p', '', step.detail || '无补充说明'));
+    const remove = make('button', 'text-button', '删除');
+    remove.type = 'button';
+    remove.addEventListener('click', async () => {
+      if (!window.confirm(`确认删除步骤“${step.title}”吗？`)) return;
+      try {
+        await apiRequest(`/api/projects/${state.currentProject.id}/steps/${step.id}`, { method: 'DELETE' });
+        await openProjectRelations(state.currentProject);
+        await refreshProjects();
+        showToast('步骤已删除');
+      } catch (error) { showToast(error.message); }
+    });
+    row.append(check, copy, remove);
+    list.append(row);
+  });
+}
+
+function renderLedgerExecutions(executions) {
+  const list = $('#ledgerExecList');
+  if (!list) return;
+  list.replaceChildren();
+  if (!executions.length) {
+    list.append(make('p', 'empty-state', '暂无执行记录。完成一次监管后在此登记。'));
+    return;
+  }
+  executions.forEach(item => {
+    const row = make('article', 'soft-ledger-exec');
+    const head = make('header');
+    head.append(
+      make('strong', '', ledgerExecLabel(item.result)),
+      make('span', '', (item.executed_at || '').replace('T', ' ').slice(0, 16) || '—'),
+    );
+    row.append(head, make('p', '', item.summary || '无摘要'));
+    if (item.evidence_note) row.append(make('small', '', item.evidence_note));
+    const remove = make('button', 'text-button', '删除');
+    remove.type = 'button';
+    remove.addEventListener('click', async () => {
+      if (!window.confirm('确认删除这条执行记录吗？')) return;
+      try {
+        await apiRequest(`/api/projects/${state.currentProject.id}/executions/${item.id}`, { method: 'DELETE' });
+        await openProjectRelations(state.currentProject);
+        await refreshProjects();
+        showToast('执行记录已删除');
+      } catch (error) { showToast(error.message); }
+    });
+    row.append(remove);
+    list.append(row);
+  });
+}
+
+$('#ledgerCategoryFilters')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-ledger-category]');
+  if (!button) return;
+  state.ledgerCategory = button.dataset.ledgerCategory || 'all';
+  $$('#ledgerCategoryFilters [data-ledger-category]').forEach(item => {
+    item.classList.toggle('active', item === button);
+  });
+  renderProjects();
+});
+
+$('#ledgerSearch')?.addEventListener('input', () => {
+  state.ledgerQuery = $('#ledgerSearch').value || '';
+  renderProjects();
+});
+
+$('#ledgerDetailTabs')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-ledger-tab]');
+  if (!button) return;
+  setLedgerDetailTab(button.dataset.ledgerTab);
+});
+
+$('#saveProjectButton')?.addEventListener('click', async () => {
   if (!state.currentProject) return;
   const payload = {
-    name: $('#projectName').value.trim(), type: $('#projectType').value.trim() || 'analysis', status: $('#projectStatus').value,
-    goal: $('#projectGoal').value.trim(), progress: Number($('#projectProgress').value || 0),
-    due_date: $('#projectDueDate').value || null, next_action: $('#projectNextAction').value.trim(),
+    name: $('#projectName').value.trim(),
+    category: $('#projectCategory').value,
+    status: $('#projectStatus').value,
+    monitor_cycle: $('#projectCycle').value,
+    sort_order: Number($('#projectSortOrder').value || 0),
+    cycle_note: $('#projectCycleNote').value.trim(),
+    next_action: $('#projectNextAction').value.trim(),
+    goal: $('#projectGoal').value.trim(),
   };
   try {
     await apiRequest(`/api/projects/${state.currentProject.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-    state.projects = await apiRequest('/api/projects'); renderProjects(); renderTodayProjects();
-    const project = state.projects.find(item => item.id === state.currentProject.id);
-    await openProjectRelations(project); showToast('项目进度已保存');
+    await refreshProjects();
+    const project = state.projects.find(item => item.id === state.currentProject.id) || state.currentProject;
+    await openProjectRelations(project);
+    showToast('概览已保存');
   } catch (error) { showToast(error.message); }
 });
 
-async function loadProjectTemplates() {
-  if (!state.apiAvailable) return;
+$('#saveLedgerLogicButton')?.addEventListener('click', async () => {
+  if (!state.currentProject) return;
   try {
-    state.projectTemplates = await apiRequest('/api/project-templates');
-    const select = $('#newProjectTemplate');
-    if (!select) return;
-    const current = select.value;
-    select.replaceChildren(new Option('不使用模板', ''));
-    state.projectTemplates.forEach(item => select.append(new Option(`${item.name}（${item.project_type}）`, item.id)));
-    select.value = current;
-  } catch (_) { state.projectTemplates = []; }
-}
+    await apiRequest(`/api/projects/${state.currentProject.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        plan_detail: $('#projectPlanDetail').value,
+        monitor_logic: $('#projectMonitorLogic').value,
+      }),
+    });
+    await refreshProjects();
+    await openProjectRelations(state.currentProject);
+    showToast('规划与监管逻辑已保存');
+  } catch (error) { showToast(error.message); }
+});
 
-$('#newProjectButton').addEventListener('click', async () => {
-  $('#projectForm').reset();
-  await loadProjectTemplates();
+$('#saveLedgerCodeButton')?.addEventListener('click', async () => {
+  if (!state.currentProject) return;
+  try {
+    await apiRequest(`/api/projects/${state.currentProject.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        code_note: $('#projectCodeNote').value.trim(),
+        code_backup: $('#projectCodeBackup').value,
+      }),
+    });
+    await refreshProjects();
+    await openProjectRelations(state.currentProject);
+    showToast('代码备份已保存');
+  } catch (error) { showToast(error.message); }
+});
+
+$('#copyLedgerCodeButton')?.addEventListener('click', async () => {
+  const text = $('#projectCodeBackup')?.value || '';
+  if (!text.trim()) { showToast('暂无代码可复制'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('代码已复制');
+  } catch (_) { showToast('复制失败，请手动选择文本'); }
+});
+
+$('#ledgerStepForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!state.currentProject) return;
+  const title = $('#ledgerStepTitle').value.trim();
+  if (!title) return;
+  try {
+    await apiRequest(`/api/projects/${state.currentProject.id}/steps`, {
+      method: 'POST',
+      body: JSON.stringify({
+        title,
+        detail: $('#ledgerStepDetail').value.trim(),
+        status: 'pending',
+      }),
+    });
+    $('#ledgerStepForm').reset();
+    await openProjectRelations(state.currentProject);
+    await refreshProjects();
+    showToast('步骤已添加');
+  } catch (error) { showToast(error.message); }
+});
+
+$('#ledgerExecForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!state.currentProject) return;
+  const executedAt = $('#ledgerExecAt').value;
+  try {
+    await apiRequest(`/api/projects/${state.currentProject.id}/executions`, {
+      method: 'POST',
+      body: JSON.stringify({
+        executed_at: executedAt ? new Date(executedAt).toISOString() : null,
+        result: $('#ledgerExecResult').value,
+        summary: $('#ledgerExecSummary').value.trim(),
+        evidence_note: $('#ledgerExecEvidence').value.trim(),
+      }),
+    });
+    $('#ledgerExecForm').reset();
+    await openProjectRelations(state.currentProject);
+    await refreshProjects();
+    showToast('执行记录已登记');
+  } catch (error) { showToast(error.message); }
+});
+
+$('#newProjectButton')?.addEventListener('click', () => {
+  $('#projectForm')?.reset();
+  if ($('#newProjectCategory')) $('#newProjectCategory').value = state.ledgerCategory !== 'all' ? state.ledgerCategory : '员工监管类';
+  if ($('#newProjectCycle')) $('#newProjectCycle').value = '按需';
   openModal($('#projectModal'));
 });
-$('#newProjectTemplate')?.addEventListener('change', () => {
-  const template = state.projectTemplates.find(item => item.id === $('#newProjectTemplate').value);
-  if (!template) return;
-  if (!$('#newProjectName').value.trim()) $('#newProjectName').value = template.name;
-  $('#newProjectType').value = template.project_type || 'analysis';
-  $('#newProjectGoal').value = template.goal_template || '';
-  $('#newProjectNextAction').value = template.next_action_template || '';
-});
-$('#projectForm').addEventListener('submit', async event => {
+
+$('#projectForm')?.addEventListener('submit', async event => {
   event.preventDefault();
   const payload = {
     name: $('#newProjectName').value.trim(),
-    type: $('#newProjectType').value,
-    goal: $('#newProjectGoal').value.trim(),
-    due_date: $('#newProjectDueDate').value || null,
+    type: 'monitor',
+    category: $('#newProjectCategory').value,
+    monitor_cycle: $('#newProjectCycle').value,
     next_action: $('#newProjectNextAction').value.trim(),
-    template_id: $('#newProjectTemplate')?.value || null,
+    goal: $('#newProjectGoal').value.trim(),
   };
-  try { const project = await apiRequest('/api/projects', { method: 'POST', body: JSON.stringify(payload) }); closeModal($('#projectModal')); state.projects = await apiRequest('/api/projects'); renderProjects(); renderTodayProjects(); await openProjectRelations(project); showToast('项目已创建'); }
-  catch (error) { showToast(error.message); }
+  try {
+    const project = await apiRequest('/api/projects', { method: 'POST', body: JSON.stringify(payload) });
+    closeModal($('#projectModal'));
+    await refreshProjects();
+    await openProjectRelations(project);
+    showToast('监管项已加入台账');
+  } catch (error) { showToast(error.message); }
 });
-$('#archiveProjectButton').addEventListener('click', async () => {
+
+$('#archiveProjectButton')?.addEventListener('click', async () => {
   if (!state.currentProject) return;
-  try { await apiRequest(`/api/projects/${state.currentProject.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'archived' }) }); closeModal($('#projectRelationModal')); state.projects = await apiRequest('/api/projects'); renderProjects(); renderTodayProjects(); showToast('项目已归档'); }
-  catch (error) { showToast(error.message); }
+  try {
+    await apiRequest(`/api/projects/${state.currentProject.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'archived' }) });
+    closeModal($('#projectRelationModal'));
+    await refreshProjects();
+    showToast('监管项已归档');
+  } catch (error) { showToast(error.message); }
 });
-$('#deleteProjectButton').addEventListener('click', async () => {
-  if (!state.currentProject || !window.confirm(`确认删除项目“${state.currentProject.name}”吗？项目关系将同时删除。`)) return;
-  try { await apiRequest(`/api/projects/${state.currentProject.id}`, { method: 'DELETE' }); closeModal($('#projectRelationModal')); state.projects = await apiRequest('/api/projects'); renderProjects(); renderTodayProjects(); showToast('项目已删除'); }
-  catch (error) { showToast(error.message); }
+
+$('#deleteProjectButton')?.addEventListener('click', async () => {
+  if (!state.currentProject || !window.confirm(`确认删除监管项“${state.currentProject.name}”吗？步骤、执行记录与关联将一并删除。`)) return;
+  try {
+    await apiRequest(`/api/projects/${state.currentProject.id}`, { method: 'DELETE' });
+    closeModal($('#projectRelationModal'));
+    await refreshProjects();
+    showToast('监管项已删除');
+  } catch (error) { showToast(error.message); }
 });
 
 function renderProjectRelations(relations) {
-  const list = $('#projectRelationList'); list.replaceChildren();
+  const list = $('#projectRelationList');
+  if (!list) return;
+  list.replaceChildren();
   if (!relations.length) { list.append(make('p', 'empty-state', '暂无关联对象')); return; }
   const typeNames = { task: '任务', data_request: '请求', sql_asset: 'SQL', model: '模型', note: '记录' };
   relations.forEach(relation => {
-    const row = make('div'); const copy = make('span');
+    const row = make('div');
+    const copy = make('span');
     copy.append(make('strong', '', relation.entity_label), make('small', '', `${relation.entity_id} · ${relation.note || relation.relation_type}`));
     const remove = make('button', '', '移除'); remove.type = 'button';
     remove.addEventListener('click', async event => {
       event.stopPropagation();
-      if (!window.confirm(`确认移除与 ${relation.entity_id} 的项目关系吗？`)) return;
+      if (!window.confirm(`确认移除与 ${relation.entity_id} 的关联吗？`)) return;
       try {
         await apiRequest(`/api/projects/${state.currentProject.id}/relations/${relation.id}`, { method: 'DELETE' });
-        state.projects = await apiRequest('/api/projects'); renderProjects(); renderTodayProjects();
-        const project = state.projects.find(item => item.id === state.currentProject.id) || state.currentProject;
-        await openProjectRelations(project); showToast('项目关系已移除');
+        await refreshProjects();
+        await openProjectRelations(state.currentProject);
+        showToast('关联已移除');
       } catch (error) { showToast(error.message); }
     });
-    row.append(make('b', 'relation-badge', typeNames[relation.entity_type] || '对象'), copy, remove); list.append(row);
+    row.append(make('b', 'relation-badge', typeNames[relation.entity_type] || '对象'), copy, remove);
+    list.append(row);
   });
 }
 
-$('#projectRelationForm').addEventListener('submit', async event => {
+$('#ledgerRelationAddForm')?.addEventListener('submit', async event => {
   event.preventDefault();
   const projectId = $('#relationProjectId').value;
   const payload = {
-    entity_type: $('#relationEntityType').value, entity_id: $('#relationEntityId').value.trim(),
-    relation_type: $('#relationType').value, note: $('#relationNote').value.trim(),
+    entity_type: $('#relationEntityType').value,
+    entity_id: $('#relationEntityId').value.trim(),
+    relation_type: $('#relationType').value,
+    note: $('#relationNote').value.trim(),
   };
   try {
     await apiRequest(`/api/projects/${projectId}/relations`, { method: 'POST', body: JSON.stringify(payload) });
-    $('#relationEntityId').value = ''; $('#relationNote').value = '';
-    state.projects = await apiRequest('/api/projects'); renderProjects();
-    renderTodayProjects();
+    $('#relationEntityId').value = '';
+    $('#relationNote').value = '';
+    await refreshProjects();
     state.currentProject = state.projects.find(item => item.id === projectId) || state.currentProject;
-    await openProjectRelations(state.currentProject); showToast('项目关系已添加');
+    await openProjectRelations(state.currentProject);
+    showToast('关联已添加');
   } catch (error) { showToast(error.message); }
 });
 
-const entityNames = { task: '任务', data_request: '数据请求', sql_asset: 'SQL', procedure: '存储过程', model: '模型', project: '项目', generated_report: '报告', note: '记录' };
+const entityNames = { task: '任务', data_request: '数据请求', sql_asset: 'SQL', procedure: '存储过程', model: '模型', project: '台账', generated_report: '报告', note: '记录' };
 const entityIcons = { task: 'i-calendar', data_request: 'i-inbox', sql_asset: 'i-code', procedure: 'i-code', model: 'i-model', project: 'i-project', generated_report: 'i-note', note: 'i-note' };
 
 async function openSearchResult(result) {
@@ -2583,7 +3374,8 @@ async function openSearchResult(result) {
     showView('notes'); const note = state.notes.find(item => item.id === result.id); if (note) openEntityDrawer('note', note); return;
   }
   if (result.entity_type === 'generated_report') {
-    showView('reports'); const detail = await apiRequest(`/api/reports/${result.id}`); $('#reportTemplate').value = detail.template_id; updateReportTemplateControls(); $('#reportWeekStart').value = detail.period_start || reportMonday(); $('#reportEndDate').value = detail.period_end || ''; $('#reportRelatedEntity').value = detail.related_entity_id || ''; renderGenericReport(detail); return;
+    showToast('报告助手已下线，历史报告仍可在数据导出中查看');
+    return;
   }
   showView(result.view);
 }
@@ -2779,20 +3571,58 @@ const RESTORE_TABLE_OPTIONS = [
   ['navigation_items', '常用导航'], ['saved_searches', '保存的检索'],
 ];
 
+function updateDataHealthSummary() {
+  const settings = state.settings || {};
+  const backups = state.backups || [];
+  const ai = settings.ai || {};
+  const calendar = settings.dingtalk_calendar || {};
+  if ($('#dataStatBackups')) $('#dataStatBackups').textContent = String(backups.length || settings.backups?.count || 0);
+  if ($('#dataStatAi')) {
+    $('#dataStatAi').textContent = ai.ready ? '已就绪' : (ai.enabled ? '待完善' : '未配置');
+  }
+  if ($('#dataStatAccess')) {
+    $('#dataStatAccess').textContent = settings.access_password_enabled ? '已启用' : '关闭';
+  }
+  if ($('#dataStatCalendar')) {
+    const on = !!calendar.enabled && (
+      (calendar.provider === 'ics' && calendar.ics_url)
+      || ((calendar.provider || 'caldav') === 'caldav' && calendar.caldav_username)
+    );
+    $('#dataStatCalendar').textContent = on ? '已配置' : (calendar.enabled ? '待完善' : '关闭');
+  }
+}
+
 function renderBackups() {
-  const list = $('#backupList'); list.replaceChildren();
-  state.backups.forEach(backup => {
-    const row = make('div'); const copy = make('span'); copy.append(make('strong', '', backup.name), make('small', '', `${formatBytes(backup.size)} · ${formatDate(backup.created_at)}`));
+  const list = $('#backupList');
+  if (!list) return;
+  list.replaceChildren();
+  state.backups.forEach((backup, index) => {
+    const row = make('div', `backup-row${index === 0 ? ' is-latest' : ''}`);
+    const mark = make('span', 'backup-mark', index === 0 ? '新' : '库');
+    const copy = make('span', 'backup-copy');
+    copy.append(
+      make('strong', '', backup.name),
+      make('small', '', `${formatBytes(backup.size)} · ${formatDate(backup.created_at)}`),
+    );
     const actions = make('span', 'backup-actions');
-    const download = make('button', '', '下载'); download.type = 'button'; download.addEventListener('click', () => downloadData(`/api/backups/${encodeURIComponent(backup.name)}/download`));
-    const restoreTables = make('button', '', '按表恢复'); restoreTables.type = 'button';
+    const download = make('button', 'secondary-button', '下载');
+    download.type = 'button';
+    download.addEventListener('click', () => downloadData(`/api/backups/${encodeURIComponent(backup.name)}/download`));
+    const restoreTables = make('button', 'secondary-button', '按表恢复');
+    restoreTables.type = 'button';
     restoreTables.addEventListener('click', () => openTableRestoreModal(backup.name));
-    const restore = make('button', 'danger-link', '整库恢复'); restore.type = 'button'; restore.addEventListener('click', async () => {
+    const restore = make('button', 'secondary-button danger-button', '整库恢复');
+    restore.type = 'button';
+    restore.addEventListener('click', async () => {
       if (!window.confirm(`确认整库恢复备份 ${backup.name} 吗？当前数据库会先自动备份。`)) return;
-      try { await apiRequest(`/api/backups/${encodeURIComponent(backup.name)}/restore`, { method: 'POST' }); showToast('数据库已恢复，正在重新载入'); setTimeout(() => location.reload(), 700); }
-      catch (error) { showToast(error.message); }
+      try {
+        await apiRequest(`/api/backups/${encodeURIComponent(backup.name)}/restore`, { method: 'POST' });
+        showToast('数据库已恢复，正在重新载入');
+        setTimeout(() => location.reload(), 700);
+      } catch (error) { showToast(error.message); }
     });
-    const remove = make('button', 'danger-link', '删除'); remove.type = 'button';
+    const remove = make('button', 'text-button danger-link', '删除');
+    remove.type = 'button';
     remove.addEventListener('click', async () => {
       if (!window.confirm(`确认删除备份 ${backup.name} 吗？`)) return;
       try {
@@ -2801,9 +3631,14 @@ function renderBackups() {
         showToast('备份已删除');
       } catch (error) { showToast(error.message); }
     });
-    actions.append(download, restoreTables, restore, remove); row.append(copy, actions); list.append(row);
+    actions.append(download, restoreTables, restore, remove);
+    row.append(mark, copy, actions);
+    list.append(row);
   });
-  if (!state.backups.length) list.append(make('p', 'empty-state', '还没有备份，建议在首次导入前创建一个。'));
+  if (!state.backups.length) {
+    list.append(make('p', 'empty-state', '还没有备份，建议在首次导入前创建一个。'));
+  }
+  updateDataHealthSummary();
 }
 
 function openTableRestoreModal(backupName) {
@@ -2858,7 +3693,7 @@ function renderAiStatus() {
   }
   if ($('#aiCapabilityLead')) {
     $('#aiCapabilityLead').textContent = ready
-      ? `当前模型 ${ai.model || '—'}，可用于周报润色、记录整理与 SQL 说明。`
+      ? `当前模型 ${ai.model || '—'}，可用于记录整理与 SQL 说明。`
       : '尚未配置模型。可先用本地规则；点「去配置」填写兼容 OpenAI 的地址、模型与密钥。';
   }
   if ($('#aiCapabilityConfig')) {
@@ -2919,12 +3754,34 @@ function fillAiSettingsForm(settings = state.settings) {
   }
   const calendar = settings?.dingtalk_calendar || {};
   if ($('#calendarEnabled')) $('#calendarEnabled').checked = !!calendar.enabled;
+  if ($('#calendarProvider')) $('#calendarProvider').value = calendar.provider === 'ics' ? 'ics' : 'caldav';
   if ($('#calendarIcsUrl')) $('#calendarIcsUrl').value = calendar.ics_url || '';
-  if ($('#calendarSettingsStatus')) {
-    $('#calendarSettingsStatus').textContent = calendar.ics_url
-      ? `已配置 ICS：${calendar.ics_url.slice(0, 64)}${calendar.ics_url.length > 64 ? '…' : ''}`
-      : '保存 ICS 链接后可同步到本地日历事件。';
+  if ($('#calendarCaldavUrl')) $('#calendarCaldavUrl').value = calendar.caldav_url || 'https://calendar.dingtalk.com';
+  if ($('#calendarCaldavUsername')) $('#calendarCaldavUsername').value = calendar.caldav_username || '';
+  if ($('#calendarCaldavPath')) $('#calendarCaldavPath').value = calendar.caldav_path || '';
+  if ($('#calendarCaldavPassword')) {
+    $('#calendarCaldavPassword').value = '';
+    $('#calendarCaldavPassword').placeholder = calendar.has_caldav_password ? '已保存，留空表示不修改' : '钉钉生成的专用密码';
   }
+  updateCalendarProviderFields();
+  if ($('#calendarSettingsStatus')) {
+    if ((calendar.provider || 'caldav') === 'caldav') {
+      $('#calendarSettingsStatus').textContent = calendar.caldav_username
+        ? `已配置 CalDAV：${calendar.caldav_username}${calendar.has_caldav_password ? ' · 密码已保存' : ' · 尚未保存密码'}`
+        : '配置钉钉 CalDAV 账号后可同步到本地日历事件。';
+    } else {
+      $('#calendarSettingsStatus').textContent = calendar.ics_url
+        ? `已配置 ICS：${calendar.ics_url.slice(0, 64)}${calendar.ics_url.length > 64 ? '…' : ''}`
+        : '保存 ICS 链接后可同步到本地日历事件。';
+    }
+  }
+  updateDataHealthSummary();
+}
+
+function updateCalendarProviderFields() {
+  const provider = $('#calendarProvider')?.value || 'caldav';
+  if ($('#calendarCaldavFields')) $('#calendarCaldavFields').hidden = provider !== 'caldav';
+  if ($('#calendarIcsFields')) $('#calendarIcsFields').hidden = provider !== 'ics';
 }
 
 async function loadSettings() {
@@ -3042,11 +3899,7 @@ function renderTodayQuickLinks() {
   homeItems.forEach(item => {
     const button = make('button');
     button.type = 'button';
-    button.append(
-      make('span', `link-logo ${item.color || 'blue'}`, item.icon_text || '链'),
-      (() => { const copy = make('span'); copy.append(make('strong', '', item.title), make('small', '', item.category || '')); return copy; })(),
-      make('b', '', '↗'),
-    );
+    button.append(make('strong', '', item.title), make('small', '', item.category || '外部入口'));
     button.addEventListener('click', () => openNavigationItem(item));
     container.append(button);
   });
@@ -3059,13 +3912,18 @@ function renderCalendarSubscriptions(items = []) {
   items.forEach(item => {
     const row = make('div');
     const copy = make('span');
-    copy.append(make('strong', '', item.name), make('small', '', `${item.provider} · ${item.last_synced_at ? formatDate(item.last_synced_at) : '未同步'}${item.last_error ? ` · ${item.last_error}` : ''}`));
+    const providerLabel = item.provider === 'caldav' ? 'CalDAV' : item.provider === 'ics' ? 'ICS' : item.provider;
+    const account = item.provider === 'caldav' && item.caldav_username ? ` · ${item.caldav_username}` : '';
+    copy.append(
+      make('strong', '', item.name),
+      make('small', '', `${providerLabel}${account} · ${item.last_synced_at ? formatDate(item.last_synced_at) : '未同步'}${item.last_error ? ` · ${item.last_error}` : ''}`),
+    );
     const sync = make('button', 'text-button', '同步'); sync.type = 'button';
     sync.addEventListener('click', async () => {
       try {
         const result = await apiRequest(`/api/calendar/subscriptions/${item.id}/sync`, { method: 'POST' });
         showToast(`已同步 ${result.synced} 条日程`);
-        await Promise.all([refreshCalendarSubscriptions(), refreshTodayCalendar()]);
+        await Promise.all([refreshCalendarSubscriptions(), refreshTodayCalendar(), refreshHomeWeekCalendar()]);
       } catch (error) { showToast(error.message); }
     });
     row.append(copy, sync); list.append(row);
@@ -3081,23 +3939,30 @@ async function refreshCalendarSubscriptions() {
 
 async function refreshTodayCalendar() {
   const list = $('#todayCalendarEvents');
-  if (!list || !state.apiAvailable) return;
+  if (!list || !state.apiAvailable) {
+    if (!state._bootstrapping) await refreshHomeWeekCalendar();
+    return;
+  }
   try {
     const today = localIsoDate(new Date());
     state.calendarEvents = await apiRequest(`/api/calendar/events?date_from=${today}&date_to=${today}`);
     list.replaceChildren();
     state.calendarEvents.forEach(event => {
-      const row = make('div');
+      const row = make('button', 'today-cal-row');
+      row.type = 'button';
       const copy = make('span');
       const time = event.all_day ? '全天' : String(event.start_at || '').slice(11, 16);
       copy.append(make('strong', '', event.title), make('small', '', `${time}${event.location ? ` · ${event.location}` : ''}`));
       row.append(make('time', '', time || '日程'), copy);
+      row.title = '查看日程详情';
+      row.addEventListener('click', () => openEntityDrawer('calendar_event', event));
       list.append(row);
     });
-    if (!state.calendarEvents.length) list.append(make('p', 'empty-state', '暂无日程，可在数据管理中配置 ICS 订阅'));
+    if (!state.calendarEvents.length) list.append(make('p', 'empty-state', '暂无日程，可在数据管理中配置日历订阅'));
   } catch (_) {
     list.replaceChildren(make('p', 'empty-state', '日程暂不可用'));
   }
+  if (!state._bootstrapping) await refreshHomeWeekCalendar();
 }
 
 async function ensureAccessUnlocked() {
@@ -3206,15 +4071,51 @@ $('#clearAccessPasswordButton')?.addEventListener('click', async () => {
     showToast('访问密码已清除');
   } catch (error) { showToast(error.message); }
 });
+$('#calendarProvider')?.addEventListener('change', updateCalendarProviderFields);
 $('#saveCalendarSettingsButton')?.addEventListener('click', async () => {
-  const ics = $('#calendarIcsUrl').value.trim();
-  const name = $('#calendarName').value.trim() || '钉钉日程';
+  const provider = $('#calendarProvider')?.value || 'caldav';
+  const name = $('#calendarName')?.value.trim() || (provider === 'caldav' ? '钉钉 CalDAV' : '钉钉日程');
+  const ics = $('#calendarIcsUrl')?.value.trim() || '';
+  const caldavUrl = $('#calendarCaldavUrl')?.value.trim() || 'https://calendar.dingtalk.com';
+  const caldavUsername = $('#calendarCaldavUsername')?.value.trim() || '';
+  const caldavPassword = $('#calendarCaldavPassword')?.value || '';
+  const caldavPath = $('#calendarCaldavPath')?.value.trim() || '';
   try {
+    const dingtalk_calendar = {
+      enabled: !!$('#calendarEnabled')?.checked,
+      provider,
+      ics_url: ics,
+      caldav_url: caldavUrl,
+      caldav_username: caldavUsername,
+      caldav_path: caldavPath,
+    };
+    if (caldavPassword.trim()) dingtalk_calendar.caldav_password = caldavPassword.trim();
     state.settings = await apiRequest('/api/settings', {
       method: 'PUT',
-      body: JSON.stringify({ dingtalk_calendar: { enabled: $('#calendarEnabled').checked, provider: 'ics', ics_url: ics } }),
+      body: JSON.stringify({ dingtalk_calendar }),
     });
-    if (ics) {
+    if (provider === 'caldav') {
+      if (!caldavUsername) throw new Error('请填写 CalDAV 用户名');
+      if (!caldavPassword.trim() && !state.settings?.dingtalk_calendar?.has_caldav_password) {
+        throw new Error('请填写 CalDAV 密码');
+      }
+      const existing = (await apiRequest('/api/calendar/subscriptions')).find(item => item.provider === 'caldav');
+      const payload = {
+        name,
+        provider: 'caldav',
+        enabled: true,
+        caldav_url: caldavUrl,
+        caldav_username: caldavUsername,
+        caldav_path: caldavPath,
+      };
+      if (caldavPassword.trim()) payload.caldav_password = caldavPassword.trim();
+      if (existing?.id) {
+        await apiRequest(`/api/calendar/subscriptions/${existing.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      } else {
+        if (!caldavPassword.trim()) throw new Error('首次保存请填写 CalDAV 密码');
+        await apiRequest('/api/calendar/subscriptions', { method: 'POST', body: JSON.stringify(payload) });
+      }
+    } else if (ics) {
       await apiRequest('/api/calendar/subscriptions', { method: 'POST', body: JSON.stringify({ name, provider: 'ics', ics_url: ics, enabled: true }) });
     }
     fillAiSettingsForm(state.settings);
@@ -3222,12 +4123,42 @@ $('#saveCalendarSettingsButton')?.addEventListener('click', async () => {
     showToast('日程订阅已保存');
   } catch (error) { showToast(error.message); }
 });
-$('#syncCalendarButton')?.addEventListener('click', async () => {
+async function syncCalendarSubscriptions(options = {}) {
+  const { refreshWeek = false, button } = options;
+  if (button) {
+    button.disabled = true;
+    button.dataset.syncLabel = button.textContent;
+    button.textContent = '同步中…';
+  }
   try {
     const result = await apiRequest('/api/calendar/sync', { method: 'POST' });
     const total = (result.results || []).reduce((sum, item) => sum + (item.synced || 0), 0);
-    showToast(`已同步 ${total} 条日程`);
-    await Promise.all([refreshCalendarSubscriptions(), refreshTodayCalendar()]);
+    const failed = (result.results || []).filter(item => item.error || item.last_error);
+    if (failed.length && !total) {
+      showToast(failed[0].error || failed[0].last_error || '日历同步失败');
+    } else {
+      showToast(`已同步 ${total} 条日程${failed.length ? `，${failed.length} 个订阅有错误` : ''}`);
+    }
+    const jobs = [refreshCalendarSubscriptions(), refreshTodayCalendar(), refreshHomeWeekCalendar()];
+    if (refreshWeek) jobs.push(refreshWeekTasks());
+    await Promise.all(jobs);
+    return result;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = button.dataset.syncLabel || '同步日历';
+    }
+  }
+}
+
+$('#syncCalendarButton')?.addEventListener('click', async () => {
+  try {
+    await syncCalendarSubscriptions({ button: $('#syncCalendarButton') });
+  } catch (error) { showToast(error.message); }
+});
+$('#syncWeekCalendarButton')?.addEventListener('click', async () => {
+  try {
+    await syncCalendarSubscriptions({ refreshWeek: true, button: $('#syncWeekCalendarButton') });
   } catch (error) { showToast(error.message); }
 });
 $('#refreshCalendarToday')?.addEventListener('click', refreshTodayCalendar);
@@ -3297,15 +4228,94 @@ function applyAppearance(mode) {
   $('#appearanceButton').setAttribute('aria-pressed', String(dark));
 }
 
+function navigationCategorySuggestions() {
+  const defaults = ['常用工具', '数据平台', '审计系统', '协作沟通', '知识文档'];
+  const existing = [...new Set((state.navigation || []).map(item => item.category).filter(Boolean))];
+  return [...new Set([...existing, ...defaults])];
+}
+
+function setNavigationColor(color = 'blue') {
+  const value = color || 'blue';
+  if ($('#navigationColor')) $('#navigationColor').value = value;
+  $$('#navigationColorSwatches .nav-color-swatch').forEach(button => {
+    const active = button.dataset.color === value;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  updateNavigationPreview();
+}
+
+function renderNavigationCategoryChips(selected = '') {
+  const chips = $('#navigationCategoryChips');
+  const list = $('#navigationCategoryOptions');
+  if (!chips) return;
+  const categories = navigationCategorySuggestions();
+  if (list) {
+    list.replaceChildren();
+    categories.forEach(name => list.append(new Option(name, name)));
+  }
+  chips.replaceChildren();
+  categories.slice(0, 8).forEach(name => {
+    const button = make('button', `nav-preset${name === selected ? ' is-active' : ''}`, name);
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      $('#navigationCategory').value = name;
+      renderNavigationCategoryChips(name);
+      updateNavigationPreview();
+    });
+    chips.append(button);
+  });
+}
+
+function updateNavigationPreview() {
+  const title = ($('#navigationTitle')?.value || '').trim() || '导航名称';
+  const description = ($('#navigationDescription')?.value || '').trim();
+  const url = ($('#navigationUrl')?.value || '').trim();
+  const icon = ($('#navigationIcon')?.value || '').trim().slice(0, 2) || '链';
+  const color = $('#navigationColor')?.value || 'blue';
+  const category = ($('#navigationCategory')?.value || '').trim() || '未分类';
+  const onHome = !!$('#navigationShowOnHome')?.checked;
+  const logo = $('#navigationPreviewLogo');
+  if (logo) {
+    logo.className = `link-logo ${color}`;
+    logo.textContent = icon;
+  }
+  $$('#navigationColorSwatches .link-logo').forEach(node => { node.textContent = icon; });
+  if ($('#navigationPreviewTitle')) $('#navigationPreviewTitle').textContent = title;
+  if ($('#navigationPreviewDesc')) {
+    $('#navigationPreviewDesc').textContent = description || url || '说明或地址会显示在这里';
+  }
+  if ($('#navigationPreviewCategory')) $('#navigationPreviewCategory').textContent = category;
+  if ($('#navigationPreviewHome')) {
+    $('#navigationPreviewHome').textContent = onHome ? '首页展示' : '仅导航页';
+    $('#navigationPreviewHome').classList.toggle('is-off', !onHome);
+  }
+  $$('#navigationIconPresets .nav-preset').forEach(button => {
+    button.classList.toggle('is-active', button.dataset.icon === icon);
+  });
+  if ($('#saveNavigationButton')) {
+    $('#saveNavigationButton').textContent = $('#navigationId')?.value ? '更新导航' : '保存导航';
+  }
+}
+
 function openNavigationForm(item = null) {
-  $('#navigationForm').reset(); $('#navigationId').value = item?.id || '';
+  $('#navigationForm').reset();
+  $('#navigationId').value = item?.id || '';
   $('#navigationModalTitle').textContent = item ? '编辑导航' : '添加导航';
-  $('#navigationTitle').value = item?.title || ''; $('#navigationUrl').value = item?.url || '';
-  $('#navigationDescription').value = item?.description || ''; $('#navigationCategory').value = item?.category || '常用工具';
-  $('#navigationIcon').value = item?.icon_text || '链'; $('#navigationColor').value = item?.color || 'blue';
-  $('#navigationOrder').value = item?.sort_order || 0; $('#deleteNavigationButton').hidden = !item;
+  $('#navigationTitle').value = item?.title || '';
+  $('#navigationUrl').value = item?.url || '';
+  $('#navigationDescription').value = item?.description || '';
+  const category = item?.category || '常用工具';
+  $('#navigationCategory').value = category;
+  $('#navigationIcon').value = item?.icon_text || '链';
+  $('#navigationOrder').value = item?.sort_order ?? 0;
+  $('#deleteNavigationButton').hidden = !item;
   if ($('#navigationShowOnHome')) $('#navigationShowOnHome').checked = item ? !!item.show_on_home : true;
+  setNavigationColor(item?.color || 'blue');
+  renderNavigationCategoryChips(category);
+  updateNavigationPreview();
   openModal($('#navigationModal'));
+  setTimeout(() => $('#navigationTitle')?.focus(), 30);
 }
 
 async function openNavigationItem(item) {
@@ -3348,22 +4358,59 @@ function renderNavigation() {
 async function refreshNavigation() { state.navigation = await apiRequest('/api/navigation'); renderNavigation(); }
 $('#newNavigationButton').addEventListener('click', () => openNavigationForm());
 $('#navigationSearch').addEventListener('input', renderNavigation);
+['navigationTitle', 'navigationUrl', 'navigationDescription', 'navigationCategory', 'navigationIcon', 'navigationOrder']
+  .forEach(id => $(`#${id}`)?.addEventListener('input', () => {
+    if (id === 'navigationCategory') renderNavigationCategoryChips($('#navigationCategory').value.trim());
+    if (id === 'navigationIcon') {
+      const value = $('#navigationIcon').value.slice(0, 2);
+      if ($('#navigationIcon').value !== value) $('#navigationIcon').value = value;
+    }
+    updateNavigationPreview();
+  }));
+$('#navigationShowOnHome')?.addEventListener('change', updateNavigationPreview);
+$$('#navigationColorSwatches .nav-color-swatch').forEach(button => {
+  button.addEventListener('click', () => setNavigationColor(button.dataset.color));
+});
+$$('#navigationIconPresets .nav-preset').forEach(button => {
+  button.addEventListener('click', () => {
+    $('#navigationIcon').value = button.dataset.icon || '链';
+    updateNavigationPreview();
+  });
+});
 $('#navigationForm').addEventListener('submit', async event => {
-  event.preventDefault(); const id = $('#navigationId').value;
+  event.preventDefault();
+  const id = $('#navigationId').value;
   const payload = {
-    title: $('#navigationTitle').value.trim(), url: $('#navigationUrl').value.trim(),
-    description: $('#navigationDescription').value.trim(), category: $('#navigationCategory').value.trim(),
-    icon_text: $('#navigationIcon').value.trim() || '链', color: $('#navigationColor').value,
+    title: $('#navigationTitle').value.trim(),
+    url: $('#navigationUrl').value.trim(),
+    description: $('#navigationDescription').value.trim(),
+    category: $('#navigationCategory').value.trim() || '常用工具',
+    icon_text: ($('#navigationIcon').value.trim() || '链').slice(0, 2),
+    color: $('#navigationColor').value || 'blue',
     sort_order: Number($('#navigationOrder').value || 0),
     show_on_home: !!$('#navigationShowOnHome')?.checked,
   };
-  try { await apiRequest(id ? `/api/navigation/${id}` : '/api/navigation', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) }); closeModal($('#navigationModal')); await refreshNavigation(); renderTodayQuickLinks(); showToast(id ? '导航已更新' : '导航已添加'); }
-  catch (error) { showToast(error.message); }
+  try {
+    await apiRequest(id ? `/api/navigation/${id}` : '/api/navigation', {
+      method: id ? 'PATCH' : 'POST',
+      body: JSON.stringify(payload),
+    });
+    closeModal($('#navigationModal'));
+    await refreshNavigation();
+    renderTodayQuickLinks();
+    showToast(id ? '导航已更新' : '导航已添加');
+  } catch (error) { showToast(error.message); }
 });
 $('#deleteNavigationButton').addEventListener('click', async () => {
-  const id = $('#navigationId').value; if (!id || !window.confirm('确认删除这个导航入口吗？')) return;
-  try { await apiRequest(`/api/navigation/${id}`, { method: 'DELETE' }); closeModal($('#navigationModal')); await refreshNavigation(); showToast('导航已删除'); }
-  catch (error) { showToast(error.message); }
+  const id = $('#navigationId').value;
+  if (!id || !window.confirm('确认删除这个导航入口吗？')) return;
+  try {
+    await apiRequest(`/api/navigation/${id}`, { method: 'DELETE' });
+    closeModal($('#navigationModal'));
+    await refreshNavigation();
+    renderTodayQuickLinks();
+    showToast('导航已删除');
+  } catch (error) { showToast(error.message); }
 });
 
 const savedAppearance = localStorage.getItem('audit-workbench.appearance');
@@ -3374,13 +4421,13 @@ $('#appearanceButton').addEventListener('click', () => {
   applyAppearance(mode);
 });
 $('#aiStatusChip')?.addEventListener('click', () => openAiSettings());
-$('#aiCapabilityConfig')?.addEventListener('click', () => openAiSettings());
+$('#aiCapabilityConfig')?.addEventListener('click', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  openAiSettings();
+});
 $$('[data-ai-jump]').forEach(button => button.addEventListener('click', () => {
   const jump = button.dataset.aiJump;
-  if (jump === 'reports') {
-    showView('reports');
-    return;
-  }
   if (jump === 'notes') {
     showView('notes');
     openRecord();
@@ -3426,10 +4473,16 @@ async function bootstrapApi() {
     }
     applyHomeLayout(state.homeLayout);
     wireHomeLayoutDrag();
-    renderSavedNotes(); renderRequests(); renderTodayRequests(); renderSqlAssets(); renderProcedures(); renderProjects(); renderTodayProjects(); renderNavigation(); renderTodayQuickLinks(); renderReportTemplateOptions(); renderGenericReportHistory(); updateBatchButtons();
+    renderSavedNotes(); renderRequests(); renderTodayRequests(); renderSqlAssets(); renderTodaySqlHome(); renderProcedures(); renderProjects(); renderTodayProjects(); renderTodayModelsHome(); renderTodayNotesHome(); renderNavigation(); renderTodayQuickLinks(); renderReportTemplateOptions(); renderGenericReportHistory(); updateBatchButtons();
     if (state.currentModel) await selectModel(state.currentModel);
-    await Promise.all([refreshWeekTasks(), refreshTodayTasks(), refreshTodayCalendar(), maybeAutoBackup()]);
-    if ($('#navTodayCount')) $('#navTodayCount').textContent = String(state.focusTasks?.length || 0);
+    state._bootstrapping = true;
+    try {
+      await Promise.all([refreshWeekTasks(), refreshTodayTasks(), refreshTodayCalendar(), maybeAutoBackup()]);
+      await refreshHomeWeekCalendar();
+    } finally {
+      state._bootstrapping = false;
+    }
+    updateNavCounts();
     if (!state.nudgeTimer) {
       state.nudgeTimer = setInterval(() => {
         if (state.apiAvailable && state.activeView === 'today') refreshTodayTasks().catch(() => {});
@@ -3461,5 +4514,5 @@ async function bootstrapApi() {
 }
 applyHomeLayout(state.homeLayout);
 wireHomeLayoutDrag();
-updateCurrentDateLabels(); renderSavedNotes(); renderWeekBoard(); renderTodayTasks(); renderTodayProjects(); renderTodayRequests(); updateBatchButtons(); bootstrapApi();
+updateCurrentDateLabels(); renderSavedNotes(); renderWeekBoard(); renderTodayTasks(); renderTodayProjects(); renderTodayRequests(); renderTodaySqlHome(); renderTodayModelsHome(); renderTodayNotesHome(); renderHomeWeekCalendar(); updateBatchButtons(); bootstrapApi();
 window.addEventListener('resize', () => applyHomeLayout(state.homeLayout));

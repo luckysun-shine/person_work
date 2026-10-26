@@ -181,6 +181,10 @@ class ProjectRelationCreate(BaseModel):
     note: str = Field(default="", max_length=1000)
 
 
+MonitorCycle = Literal["日", "周", "月", "季", "年", "按需"]
+LedgerCategory = Literal["员工监管类", "经销商监管类", "合作商监管类", "AI助力管理类", "其他"]
+
+
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     type: str | None = Field(default=None, min_length=1, max_length=40)
@@ -189,17 +193,61 @@ class ProjectUpdate(BaseModel):
     progress: int | None = Field(default=None, ge=0, le=100)
     due_date: str | None = None
     next_action: str | None = Field(default=None, max_length=1000)
+    category: LedgerCategory | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=100000)
+    monitor_cycle: MonitorCycle | None = None
+    cycle_note: str | None = Field(default=None, max_length=2000)
+    plan_detail: str | None = Field(default=None, max_length=20000)
+    monitor_logic: str | None = Field(default=None, max_length=20000)
+    code_backup: str | None = Field(default=None, max_length=200000)
+    code_note: str | None = Field(default=None, max_length=4000)
 
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    type: str = Field(default="analysis", min_length=1, max_length=40)
+    type: str = Field(default="monitor", min_length=1, max_length=40)
     goal: str = Field(default="", max_length=4000)
     status: Literal["active", "paused", "done", "archived"] = "active"
     progress: int = Field(default=0, ge=0, le=100)
     due_date: str | None = None
     next_action: str = Field(default="", max_length=1000)
     template_id: str | None = Field(default=None, max_length=80)
+    category: LedgerCategory = "员工监管类"
+    sort_order: int = Field(default=0, ge=0, le=100000)
+    monitor_cycle: MonitorCycle = "按需"
+    cycle_note: str = Field(default="", max_length=2000)
+    plan_detail: str = Field(default="", max_length=20000)
+    monitor_logic: str = Field(default="", max_length=20000)
+    code_backup: str = Field(default="", max_length=200000)
+    code_note: str = Field(default="", max_length=4000)
+
+
+class ProjectStepCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    detail: str = Field(default="", max_length=4000)
+    status: Literal["pending", "done"] = "pending"
+    sort_order: int = Field(default=0, ge=0, le=100000)
+
+
+class ProjectStepUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    detail: str | None = Field(default=None, max_length=4000)
+    status: Literal["pending", "done"] | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=100000)
+
+
+class ProjectExecutionCreate(BaseModel):
+    executed_at: str | None = None
+    result: Literal["success", "partial", "failed"] = "success"
+    summary: str = Field(default="", max_length=4000)
+    evidence_note: str = Field(default="", max_length=4000)
+
+
+class ProjectExecutionUpdate(BaseModel):
+    executed_at: str | None = None
+    result: Literal["success", "partial", "failed"] | None = None
+    summary: str | None = Field(default=None, max_length=4000)
+    evidence_note: str | None = Field(default=None, max_length=4000)
 
 
 class ProjectTemplateCreate(BaseModel):
@@ -362,12 +410,17 @@ class AISettingsUpdate(BaseModel):
 
 class DingTalkCalendarSettingsUpdate(BaseModel):
     enabled: bool | None = None
-    provider: Literal["ics", "dingtalk"] | None = None
+    provider: Literal["ics", "dingtalk", "caldav"] | None = None
     ics_url: str | None = Field(default=None, max_length=2000)
     app_key: str | None = Field(default=None, max_length=200)
     app_secret: str | None = Field(default=None, max_length=500)
     clear_app_secret: bool = False
     calendar_id: str | None = Field(default=None, max_length=200)
+    caldav_url: str | None = Field(default=None, max_length=500)
+    caldav_username: str | None = Field(default=None, max_length=200)
+    caldav_password: str | None = Field(default=None, max_length=500)
+    clear_caldav_password: bool = False
+    caldav_path: str | None = Field(default=None, max_length=500)
     sync_days_back: int | None = Field(default=None, ge=0, le=90)
     sync_days_forward: int | None = Field(default=None, ge=1, le=120)
 
@@ -388,16 +441,25 @@ class AccessUnlock(BaseModel):
 
 class CalendarSubscriptionCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    provider: Literal["ics", "dingtalk"] = "ics"
+    provider: Literal["ics", "dingtalk", "caldav"] = "ics"
     ics_url: str = Field(default="", max_length=2000)
     enabled: bool = True
+    caldav_url: str = Field(default="", max_length=500)
+    caldav_username: str = Field(default="", max_length=200)
+    caldav_password: str = Field(default="", max_length=500)
+    caldav_path: str = Field(default="", max_length=500)
 
 
 class CalendarSubscriptionUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
-    provider: Literal["ics", "dingtalk"] | None = None
+    provider: Literal["ics", "dingtalk", "caldav"] | None = None
     ics_url: str | None = Field(default=None, max_length=2000)
     enabled: bool | None = None
+    caldav_url: str | None = Field(default=None, max_length=500)
+    caldav_username: str | None = Field(default=None, max_length=200)
+    caldav_password: str | None = Field(default=None, max_length=500)
+    clear_caldav_password: bool = False
+    caldav_path: str | None = Field(default=None, max_length=500)
 
 
 class SavedSearchCreate(BaseModel):
@@ -431,6 +493,7 @@ class DataRequestCreate(BaseModel):
     delivery_method: str = Field(default="", max_length=100)
     delivery_location: str = Field(default="", max_length=1000)
     sensitive_notes: str = Field(default="", max_length=2000)
+    sql_text: str = Field(default="", max_length=200000)
 
 
 class DataRequestUpdate(BaseModel):
@@ -449,6 +512,7 @@ class DataRequestUpdate(BaseModel):
     delivery_method: str | None = Field(default=None, max_length=100)
     delivery_location: str | None = Field(default=None, max_length=1000)
     sensitive_notes: str | None = Field(default=None, max_length=2000)
+    sql_text: str | None = Field(default=None, max_length=200000)
 
 
 class BatchIds(BaseModel):

@@ -46,7 +46,11 @@ from ..schemas import (
     NoteAssistRequest,
     NoteUpdate,
     ProjectCreate,
+    ProjectExecutionCreate,
+    ProjectExecutionUpdate,
     ProjectRelationCreate,
+    ProjectStepCreate,
+    ProjectStepUpdate,
     ProjectTemplateCreate,
     ProjectTemplateUpdate,
     ProjectUpdate,
@@ -73,13 +77,59 @@ from ..secrets_util import decrypt_secret, encrypt_secret, mask_secret
 
 router = APIRouter(tags=["projects"])
 
+def _attach_ledger_summary(items: list[dict]) -> list[dict]:
+    for item in items:
+        latest = C.fetch_one(
+            """SELECT executed_at, result, summary FROM project_executions
+            WHERE project_id = ? ORDER BY executed_at DESC, created_at DESC LIMIT 1""",
+            (item["id"],),
+        )
+        pending_steps = C.fetch_one(
+            """SELECT COUNT(*) AS c FROM project_update_steps
+            WHERE project_id = ? AND status != 'done'""",
+            (item["id"],),
+        )
+        item["latest_execution"] = latest
+        item["pending_steps"] = int((pending_steps or {}).get("c") or 0)
+        item["relation_count"] = int(item.get("relation_count") or 0)
+    return items
+
+
 @router.get("/api/projects")
-def list_projects() -> list[dict]:
-    return C.fetch_all(
-        """SELECT p.*, COUNT(r.id) AS relation_count
-        FROM projects p LEFT JOIN project_relations r ON r.project_id = p.id
-        GROUP BY p.id ORDER BY p.updated_at DESC"""
+def list_projects(
+    category: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    ledger_only: bool = Query(default=True),
+) -> list[dict]:
+    clauses: list[str] = []
+    params: list[str] = []
+    if ledger_only and not category:
+        clauses.append("p.category IN ('员工监管类','经销商监管类','合作商监管类','AI助力管理类')")
+    if category:
+        clauses.append("p.category = ?")
+        params.append(category)
+    if q:
+        clauses.append("(p.name LIKE ? OR p.goal LIKE ? OR p.plan_detail LIKE ? OR p.monitor_logic LIKE ?)")
+        keyword = f"%{q}%"
+        params.extend([keyword, keyword, keyword, keyword])
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    items = C.fetch_all(
+        f"""SELECT p.*, COUNT(r.id) AS relation_count
+        FROM projects p
+        LEFT JOIN project_relations r ON r.project_id = p.id
+        {where}
+        GROUP BY p.id
+        ORDER BY
+          CASE p.category
+            WHEN '员工监管类' THEN 1
+            WHEN '经销商监管类' THEN 2
+            WHEN '合作商监管类' THEN 3
+            WHEN 'AI助力管理类' THEN 4
+            ELSE 9 END,
+          p.sort_order, p.name""",
+        tuple(params),
     )
+    return _attach_ledger_summary(items)
 
 
 @router.get("/api/project-templates")
@@ -120,10 +170,10 @@ def delete_project_template(template_id: str) -> Response:
 
 @router.post("/api/projects", status_code=status.HTTP_201_CREATED)
 def create_project(payload: ProjectCreate) -> dict:
-    project_id = new_id("P")
+    project_id = new_id("ML")
     now = utc_now()
     name = payload.name
-    project_type = payload.type
+    project_type = payload.type or "monitor"
     goal = payload.goal
     next_action = payload.next_action
     checklist: list[str] = []
@@ -131,7 +181,7 @@ def create_project(payload: ProjectCreate) -> dict:
         template = C.fetch_one("SELECT * FROM project_templates WHERE id = ?", (payload.template_id,))
         if not template:
             raise HTTPException(status_code=404, detail="项目模板不存在")
-        project_type = project_type or template.get("project_type") or "analysis"
+        project_type = project_type or template.get("project_type") or "monitor"
         if not goal:
             goal = template.get("goal_template") or ""
         if not next_action:
@@ -142,13 +192,22 @@ def create_project(payload: ProjectCreate) -> dict:
     with transaction() as connection:
         connection.execute(
             """INSERT INTO projects
-            (id,name,type,goal,status,progress,due_date,next_action,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (project_id, name, project_type, goal, payload.status, payload.progress,
-             payload.due_date, next_action, now, now),
+            (id,name,type,goal,status,progress,due_date,next_action,
+             category,sort_order,monitor_cycle,cycle_note,plan_detail,monitor_logic,
+             code_backup,code_note,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                project_id, name, project_type, goal, payload.status, payload.progress,
+                payload.due_date, next_action, payload.category, payload.sort_order,
+                payload.monitor_cycle, payload.cycle_note, payload.plan_detail,
+                payload.monitor_logic, payload.code_backup, payload.code_note, now, now,
+            ),
         )
     project = C.fetch_one("SELECT * FROM projects WHERE id = ?", (project_id,))
     project["checklist"] = checklist
+    project["latest_execution"] = None
+    project["pending_steps"] = 0
+    project["relation_count"] = 0
     return project
 
 
@@ -190,15 +249,29 @@ def get_project(project_id: str) -> dict:
         "SELECT * FROM data_requests WHERE related_project_id = ? ORDER BY created_at DESC",
         (project_id,),
     )
+    steps = C.fetch_all(
+        """SELECT * FROM project_update_steps
+        WHERE project_id = ? ORDER BY sort_order, created_at""",
+        (project_id,),
+    )
+    executions = C.fetch_all(
+        """SELECT * FROM project_executions
+        WHERE project_id = ? ORDER BY executed_at DESC, created_at DESC""",
+        (project_id,),
+    )
     project["relation_count"] = len(relations)
     project["task_total"] = len(direct_tasks)
     project["task_done"] = sum(task["status"] == "done" for task in direct_tasks)
     project["request_total"] = len(related_requests)
+    project["pending_steps"] = sum(1 for step in steps if step.get("status") != "done")
+    project["latest_execution"] = executions[0] if executions else None
     return {
         "project": project,
         "relations": relations,
         "tasks": direct_tasks,
         "requests": related_requests,
+        "update_steps": steps,
+        "executions": executions,
     }
 
 
@@ -258,6 +331,131 @@ def delete_project_relation(project_id: str, relation_id: str) -> Response:
         )
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="项目关系不存在")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _require_project(project_id: str) -> dict:
+    project = C.fetch_one("SELECT * FROM projects WHERE id = ?", (project_id,))
+    if not project:
+        raise HTTPException(status_code=404, detail="台账条目不存在")
+    return project
+
+
+@router.get("/api/projects/{project_id}/steps")
+def list_project_steps(project_id: str) -> list[dict]:
+    _require_project(project_id)
+    return C.fetch_all(
+        """SELECT * FROM project_update_steps
+        WHERE project_id = ? ORDER BY sort_order, created_at""",
+        (project_id,),
+    )
+
+
+@router.post("/api/projects/{project_id}/steps", status_code=status.HTTP_201_CREATED)
+def create_project_step(project_id: str, payload: ProjectStepCreate) -> dict:
+    _require_project(project_id)
+    step_id, now = new_id("PS"), utc_now()
+    done_at = now if payload.status == "done" else None
+    with transaction() as connection:
+        connection.execute(
+            """INSERT INTO project_update_steps
+            (id,project_id,title,detail,status,sort_order,done_at,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                step_id, project_id, payload.title, payload.detail, payload.status,
+                payload.sort_order, done_at, now, now,
+            ),
+        )
+    return C.fetch_one("SELECT * FROM project_update_steps WHERE id = ?", (step_id,))
+
+
+@router.patch("/api/projects/{project_id}/steps/{step_id}")
+def update_project_step(project_id: str, step_id: str, payload: ProjectStepUpdate) -> dict:
+    _require_project(project_id)
+    item = C.fetch_one(
+        "SELECT * FROM project_update_steps WHERE id = ? AND project_id = ?",
+        (step_id, project_id),
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="更新步骤不存在")
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("status") == "done" and item.get("status") != "done":
+        changes["done_at"] = utc_now()
+    elif changes.get("status") == "pending":
+        changes["done_at"] = None
+    return C.update_record("project_update_steps", step_id, changes, "更新步骤不存在")
+
+
+@router.delete("/api/projects/{project_id}/steps/{step_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project_step(project_id: str, step_id: str) -> Response:
+    with transaction() as connection:
+        result = connection.execute(
+            "DELETE FROM project_update_steps WHERE id = ? AND project_id = ?",
+            (step_id, project_id),
+        )
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="更新步骤不存在")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/api/projects/{project_id}/executions")
+def list_project_executions(project_id: str) -> list[dict]:
+    _require_project(project_id)
+    return C.fetch_all(
+        """SELECT * FROM project_executions
+        WHERE project_id = ? ORDER BY executed_at DESC, created_at DESC""",
+        (project_id,),
+    )
+
+
+@router.post("/api/projects/{project_id}/executions", status_code=status.HTTP_201_CREATED)
+def create_project_execution(project_id: str, payload: ProjectExecutionCreate) -> dict:
+    _require_project(project_id)
+    exec_id, now = new_id("PE"), utc_now()
+    executed_at = payload.executed_at or now
+    with transaction() as connection:
+        connection.execute(
+            """INSERT INTO project_executions
+            (id,project_id,executed_at,result,summary,evidence_note,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?)""",
+            (
+                exec_id, project_id, executed_at, payload.result,
+                payload.summary, payload.evidence_note, now, now,
+            ),
+        )
+        connection.execute(
+            "UPDATE projects SET updated_at = ? WHERE id = ?",
+            (now, project_id),
+        )
+    return C.fetch_one("SELECT * FROM project_executions WHERE id = ?", (exec_id,))
+
+
+@router.patch("/api/projects/{project_id}/executions/{execution_id}")
+def update_project_execution(project_id: str, execution_id: str, payload: ProjectExecutionUpdate) -> dict:
+    _require_project(project_id)
+    item = C.fetch_one(
+        "SELECT * FROM project_executions WHERE id = ? AND project_id = ?",
+        (execution_id, project_id),
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="执行记录不存在")
+    return C.update_record(
+        "project_executions",
+        execution_id,
+        payload.model_dump(exclude_unset=True),
+        "执行记录不存在",
+    )
+
+
+@router.delete("/api/projects/{project_id}/executions/{execution_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project_execution(project_id: str, execution_id: str) -> Response:
+    with transaction() as connection:
+        result = connection.execute(
+            "DELETE FROM project_executions WHERE id = ? AND project_id = ?",
+            (execution_id, project_id),
+        )
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="执行记录不存在")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

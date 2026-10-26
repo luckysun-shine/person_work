@@ -118,8 +118,8 @@ def create_data_request(payload: DataRequestCreate) -> dict:
         connection.execute(
             """INSERT INTO data_requests
             (id,title,purpose,scope,caliber_notes,due_at,status,next_action,related_sql_ids_json,related_project_id,
-             requester,department,waiting_on,delivery_method,delivery_location,sensitive_notes,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             requester,department,waiting_on,delivery_method,delivery_location,sensitive_notes,sql_text,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 request_id,
                 payload.title,
@@ -137,6 +137,7 @@ def create_data_request(payload: DataRequestCreate) -> dict:
                 payload.delivery_method,
                 payload.delivery_location,
                 payload.sensitive_notes,
+                payload.sql_text,
                 now,
                 now,
             ),

@@ -118,16 +118,21 @@ def load_dingtalk_calendar_settings() -> dict:
     stored = get_setting("dingtalk_calendar", None) or {}
     defaults = {
         "enabled": False,
-        "provider": "ics",
+        "provider": "caldav",
         "ics_url": "",
         "app_key": "",
         "app_secret": "",
         "calendar_id": "",
+        "caldav_url": "https://calendar.dingtalk.com",
+        "caldav_username": "",
+        "caldav_password": "",
+        "caldav_path": "",
         "sync_days_back": 7,
         "sync_days_forward": 21,
     }
     merged = {**defaults, **(stored if isinstance(stored, dict) else {})}
     merged["app_secret"] = decrypt_secret(merged.get("app_secret") or "")
+    merged["caldav_password"] = decrypt_secret(merged.get("caldav_password") or "")
     return merged
 
 
@@ -135,13 +140,41 @@ def public_dingtalk_calendar_settings() -> dict:
     settings = load_dingtalk_calendar_settings()
     return {
         "enabled": bool(settings.get("enabled")),
-        "provider": settings.get("provider") or "ics",
+        "provider": settings.get("provider") or "caldav",
         "ics_url": settings.get("ics_url") or "",
         "app_key": settings.get("app_key") or "",
         "has_app_secret": bool(settings.get("app_secret")),
         "calendar_id": settings.get("calendar_id") or "",
+        "caldav_url": settings.get("caldav_url") or "https://calendar.dingtalk.com",
+        "caldav_username": settings.get("caldav_username") or "",
+        "has_caldav_password": bool(settings.get("caldav_password")),
+        "caldav_path": settings.get("caldav_path") or "",
         "sync_days_back": int(settings.get("sync_days_back") or 7),
         "sync_days_forward": int(settings.get("sync_days_forward") or 21),
+    }
+
+
+def public_calendar_subscription(item: dict) -> dict:
+    config = item.get("config") if isinstance(item.get("config"), dict) else {}
+    if not config and isinstance(item.get("config_json"), str):
+        try:
+            config = json.loads(item.get("config_json") or "{}")
+        except Exception:
+            config = {}
+    return {
+        "id": item.get("id"),
+        "name": item.get("name"),
+        "provider": item.get("provider") or "ics",
+        "ics_url": item.get("ics_url") or "",
+        "enabled": bool(item.get("enabled")),
+        "last_synced_at": item.get("last_synced_at"),
+        "last_error": item.get("last_error") or "",
+        "created_at": item.get("created_at"),
+        "updated_at": item.get("updated_at"),
+        "caldav_url": config.get("url") or "",
+        "caldav_username": config.get("username") or "",
+        "has_caldav_password": bool(config.get("password_enc") or config.get("password")),
+        "caldav_path": config.get("calendar_path") or "",
     }
 
 

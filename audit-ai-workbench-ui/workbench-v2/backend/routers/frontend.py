@@ -83,6 +83,11 @@ def apple_hig_styles() -> FileResponse:
     return FileResponse(PROJECT_DIR / "ui-apple-hig.css", media_type="text/css")
 
 
+@router.get("/ui-soft-welcome.css", include_in_schema=False)
+def soft_welcome_styles() -> FileResponse:
+    return FileResponse(PROJECT_DIR / "ui-soft-welcome.css", media_type="text/css")
+
+
 @router.get("/app.js", include_in_schema=False)
 def javascript() -> FileResponse:
     return FileResponse(PROJECT_DIR / "app.js", media_type="application/javascript")

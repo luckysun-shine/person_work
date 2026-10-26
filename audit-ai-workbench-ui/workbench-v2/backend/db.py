@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS data_requests (
     delivery_method TEXT NOT NULL DEFAULT '',
     delivery_location TEXT NOT NULL DEFAULT '',
     sensitive_notes TEXT NOT NULL DEFAULT '',
+    sql_text TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -266,8 +267,41 @@ CREATE TABLE IF NOT EXISTS projects (
     progress INTEGER NOT NULL DEFAULT 0,
     due_date TEXT,
     next_action TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '其他',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    monitor_cycle TEXT NOT NULL DEFAULT '按需',
+    cycle_note TEXT NOT NULL DEFAULT '',
+    plan_detail TEXT NOT NULL DEFAULT '',
+    monitor_logic TEXT NOT NULL DEFAULT '',
+    code_backup TEXT NOT NULL DEFAULT '',
+    code_note TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_update_steps (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    done_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS project_executions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    executed_at TEXT NOT NULL,
+    result TEXT NOT NULL DEFAULT 'success',
+    summary TEXT NOT NULL DEFAULT '',
+    evidence_note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS sql_versions (
@@ -439,11 +473,15 @@ DEFAULT_SETTINGS = {
     "access_password_hash": "",
     "dingtalk_calendar": {
         "enabled": False,
-        "provider": "ics",
+        "provider": "caldav",
         "ics_url": "",
         "app_key": "",
         "app_secret": "",
         "calendar_id": "",
+        "caldav_url": "https://calendar.dingtalk.com",
+        "caldav_username": "",
+        "caldav_password": "",
+        "caldav_path": "",
         "sync_days_back": 7,
         "sync_days_forward": 21,
     },
@@ -477,6 +515,7 @@ def init_db(db_path: Path | None = None) -> None:
             ("delivery_method", "TEXT NOT NULL DEFAULT ''"),
             ("delivery_location", "TEXT NOT NULL DEFAULT ''"),
             ("sensitive_notes", "TEXT NOT NULL DEFAULT ''"),
+            ("sql_text", "TEXT NOT NULL DEFAULT ''"),
         ):
             ensure_column(connection, "data_requests", column, definition)
         ensure_column(connection, "tasks", "waiting_on", "TEXT NOT NULL DEFAULT ''")
@@ -491,6 +530,17 @@ def init_db(db_path: Path | None = None) -> None:
         ensure_column(connection, "work_notes", "is_favorite", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(connection, "work_notes", "is_archived", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(connection, "navigation_items", "show_on_home", "INTEGER NOT NULL DEFAULT 1")
+        for column, definition in (
+            ("category", "TEXT NOT NULL DEFAULT '其他'"),
+            ("sort_order", "INTEGER NOT NULL DEFAULT 0"),
+            ("monitor_cycle", "TEXT NOT NULL DEFAULT '按需'"),
+            ("cycle_note", "TEXT NOT NULL DEFAULT ''"),
+            ("plan_detail", "TEXT NOT NULL DEFAULT ''"),
+            ("monitor_logic", "TEXT NOT NULL DEFAULT ''"),
+            ("code_backup", "TEXT NOT NULL DEFAULT ''"),
+            ("code_note", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            ensure_column(connection, "projects", column, definition)
         for key, value in DEFAULT_SETTINGS.items():
             existing = connection.execute("SELECT key FROM app_settings WHERE key = ?", (key,)).fetchone()
             if not existing:
@@ -499,6 +549,85 @@ def init_db(db_path: Path | None = None) -> None:
                     (key, json.dumps(value, ensure_ascii=False), utc_now()),
                 )
         seed_database(connection)
+
+
+LEDGER_CATALOG: list[tuple[str, str, str, int]] = [
+    # category, name, default_cycle, sort_order
+    ("员工监管类", "员工异常外出", "日", 10),
+    ("员工监管类", "员工全面考勤", "日", 20),
+    ("员工监管类", "弹性办公数据分析", "周", 30),
+    ("员工监管类", "员工差旅打车监管", "周", 40),
+    ("员工监管类", "员工酒店住宿监管", "周", 50),
+    ("员工监管类", "员工补卡异常监管", "周", 60),
+    ("员工监管类", "员工及经销商异地登录监管", "日", 70),
+    ("员工监管类", "车辆在场分析", "日", 80),
+    ("经销商监管类", "经销商引流监管报表", "周", 10),
+    ("经销商监管类", "经销商导单及私设网点监管", "周", 20),
+    ("经销商监管类", "订单毛利监管", "周", 30),
+    ("经销商监管类", "订单售后监管", "周", 40),
+    ("经销商监管类", "经销商留资异常监管", "周", 50),
+    ("经销商监管类", "经销商补贴监管", "月", 60),
+    ("经销商监管类", "经销商门店竞品分析", "月", 70),
+    ("经销商监管类", "经销商广告补贴监管", "月", 80),
+    ("合作商监管类", "监察物料BOM调整提示", "周", 10),
+    ("合作商监管类", "合作商关联关系及异常风险监管", "月", 20),
+    ("AI助力管理类", "林氏风险账单", "日", 10),
+    ("AI助力管理类", "审监AI早报", "日", 20),
+    ("AI助力管理类", "审监知识库平台", "按需", 30),
+    ("AI助力管理类", "审监岗位技能", "按需", 40),
+]
+
+LEDGER_CATEGORIES = ("员工监管类", "经销商监管类", "合作商监管类", "AI助力管理类")
+
+
+def seed_monitor_ledger(connection: sqlite3.Connection, now: str | None = None) -> None:
+    """Idempotently ensure the standard 22 ledger items exist."""
+    stamp = now or utc_now()
+    for category, name, cycle, sort_order in LEDGER_CATALOG:
+        existing = connection.execute(
+            "SELECT id FROM projects WHERE name = ? AND category = ?",
+            (name, category),
+        ).fetchone()
+        if existing:
+            connection.execute(
+                """UPDATE projects
+                SET sort_order = ?, monitor_cycle = CASE
+                    WHEN monitor_cycle IS NULL OR monitor_cycle = '' OR monitor_cycle = '按需' THEN ?
+                    ELSE monitor_cycle END,
+                    type = COALESCE(NULLIF(type, ''), 'monitor'),
+                    updated_at = ?
+                WHERE id = ?""",
+                (sort_order, cycle, stamp, existing["id"]),
+            )
+            continue
+        project_id = new_id("ML")
+        connection.execute(
+            """INSERT INTO projects
+            (id,name,type,goal,status,progress,due_date,next_action,
+             category,sort_order,monitor_cycle,cycle_note,plan_detail,monitor_logic,
+             code_backup,code_note,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                project_id,
+                name,
+                "monitor",
+                f"{category} · {name}",
+                "active",
+                0,
+                None,
+                "完善监管逻辑与执行记录",
+                category,
+                sort_order,
+                cycle,
+                "",
+                "",
+                "",
+                "",
+                "",
+                stamp,
+                stamp,
+            ),
+        )
 
 
 def seed_database(connection: sqlite3.Connection) -> None:
@@ -575,18 +704,24 @@ def seed_database(connection: sqlite3.Connection) -> None:
             [(*model, now, now) for model in models],
         )
 
-    if connection.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 0:
-        projects = [
+    if connection.execute("SELECT COUNT(*) FROM projects WHERE id IN ('P-001','P-009','P-012')").fetchone()[0] == 0:
+        legacy = [
             ("P-001", "采购异常监测模型", "model", "建立采购付款异常监测闭环", "active", 78, "2026-10-23", "完成 v2.4 抽样验证"),
             ("P-009", "审计报告数据支撑", "report", "支撑年度审计报告数据分析", "active", 52, "2026-10-30", "补充季度趋势口径"),
             ("P-012", "制度知识库", "ai", "搭建制度检索与问答知识库", "active", 34, "2026-11-15", "评估 50 条问答召回结果"),
         ]
         connection.executemany(
-            """INSERT INTO projects
-            (id,name,type,goal,status,progress,due_date,next_action,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            [(*project, now, now) for project in projects],
+            """INSERT OR IGNORE INTO projects
+            (id,name,type,goal,status,progress,due_date,next_action,category,sort_order,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            [(*item, "其他", 0, now, now) for item in legacy],
         )
+    connection.execute(
+        """UPDATE projects SET category = '其他'
+        WHERE id IN ('P-001','P-009','P-012')
+          AND (category IS NULL OR category = '')"""
+    )
+    seed_monitor_ledger(connection, now)
 
     if connection.execute("SELECT COUNT(*) FROM sql_versions").fetchone()[0] == 0:
         assets = connection.execute(
