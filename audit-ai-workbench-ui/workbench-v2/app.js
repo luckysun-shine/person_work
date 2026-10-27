@@ -205,13 +205,6 @@ async function jumpToProject(projectId) {
   }
 }
 
-function syncRequestProjectJump() {
-  const jump = $('#requestProjectJump');
-  const select = $('#requestProject');
-  if (!jump || !select) return;
-  jump.disabled = !select.value;
-}
-
 function getSqlPickerIds(hiddenId) {
   return splitValues($(`#${hiddenId}`)?.value || '');
 }
@@ -606,7 +599,7 @@ function renderTodayRequests() {
     button.type = 'button';
     button.append(
       make('strong', '', item.title),
-      make('small', '', `${item.next_action || '待安排'} · ${status[0]}`),
+      make('small', '', `${item.requester || item.department || '未填需求人'} · ${item.sql_current_version || 'v1.0'} · ${status[0]}`),
     );
     button.addEventListener('click', () => { showView('requests'); openEntityDrawer('data_request', item); });
     rows.append(button);
@@ -1593,10 +1586,20 @@ function addDetailSection(title, description = '', rows = []) {
   $('#entityDetailContent').append(section);
 }
 
-function addRequestSqlSection(item) {
+async function loadRequestSqlVersions(requestId) {
+  if (!requestId || !state.apiAvailable) return [];
+  try {
+    return await apiRequest(`/api/data-requests/${requestId}/sql-versions`);
+  } catch (_) {
+    return [];
+  }
+}
+
+function addRequestSqlSection(item, versions = []) {
   const section = make('section', 'entity-detail-section request-sql-detail');
   const head = make('div', 'section-title');
-  head.append(make('h3', '', 'SQL 代码记录'));
+  const versionLabel = item.sql_current_version || 'v1.0';
+  head.append(make('h3', '', `SQL 代码 · ${versionLabel}`));
   const sql = String(item.sql_text || '').trim();
   if (sql) {
     const copy = make('button', 'copy-button');
@@ -1612,11 +1615,11 @@ function addRequestSqlSection(item) {
   }
   section.append(head);
   if (!sql) {
-    section.append(make('p', 'entity-detail-copy', '尚未记录本次取数 SQL。编辑请求时可粘贴保存。'));
+    section.append(make('p', 'entity-detail-copy', '尚未记录取数 SQL。编辑请求时可粘贴并另存版本。'));
   } else {
     const shell = make('div', 'sql-code-shell');
     const chrome = make('div', 'sql-code-chrome');
-    chrome.append(make('span', ''), make('span', ''), make('span', ''), make('em', '', 'request.sql'));
+    chrome.append(make('span', ''), make('span', ''), make('span', ''), make('em', '', `${versionLabel}.sql`));
     const pre = make('pre', 'sql-code');
     const code = document.createElement('code');
     code.textContent = item.sql_text || '';
@@ -1624,44 +1627,21 @@ function addRequestSqlSection(item) {
     shell.append(chrome, pre);
     section.append(shell);
   }
-  $('#entityDetailContent').append(section);
-}
-
-function addRequestRelationSection(item) {
-  const section = make('section', 'entity-detail-section');
-  section.append(make('h3', '', '关联跳转'));
-  section.append(make('p', 'entity-detail-copy', '点击下方关联项，可直接打开对应 SQL 或项目。'));
-
-  const projectRow = make('div', 'relation-row');
-  projectRow.append(make('span', '', '关联项目'));
-  if (item.related_project_id) {
-    const btn = make('button', 'assoc-jump', projectLabel(item.related_project_id));
-    btn.type = 'button';
-    btn.title = `打开项目 ${item.related_project_id}`;
-    btn.addEventListener('click', () => jumpToProject(item.related_project_id));
-    projectRow.append(btn);
-  } else {
-    projectRow.append(make('strong', '', '未关联'));
-  }
-  section.append(projectRow);
-
-  const sqlRow = make('div', 'relation-row relation-row-links');
-  sqlRow.append(make('span', '', '关联 SQL'));
-  const sqlIds = item.related_sql_ids || [];
-  if (sqlIds.length) {
-    const links = make('div', 'assoc-jump-list');
-    sqlIds.forEach(id => {
-      const btn = make('button', 'assoc-jump', sqlAssetLabel(id));
-      btn.type = 'button';
-      btn.title = `打开 SQL ${id}`;
-      btn.addEventListener('click', () => jumpToSqlAsset(id));
-      links.append(btn);
+  if (versions.length) {
+    section.append(make('h3', '', '版本历史'));
+    const list = make('div', 'history-list soft-history');
+    versions.forEach(version => {
+      const row = make('div');
+      const copy = make('span');
+      copy.append(
+        make('strong', '', version.version),
+        make('small', '', `${formatDate(version.created_at)} · ${version.change_summary || '无说明'}`),
+      );
+      row.append(copy);
+      list.append(row);
     });
-    sqlRow.append(links);
-  } else {
-    sqlRow.append(make('strong', '', '未关联'));
+    section.append(list);
   }
-  section.append(sqlRow);
   $('#entityDetailContent').append(section);
 }
 
@@ -1682,7 +1662,7 @@ function formatCalendarEventWhen(event) {
   return day || formatDate(start) || '未安排';
 }
 
-function openEntityDrawer(type, item) {
+async function openEntityDrawer(type, item) {
   if (!item) return;
   closeDrawer();
   state.currentDetail = { type, item };
@@ -1714,20 +1694,29 @@ function openEntityDrawer(type, item) {
     ]);
   } else if (type === 'data_request') {
     const status = requestStatus[item.status] || [item.status, 'waiting'];
-    $('#entityDetailEyebrow').textContent = `DATA REQUEST / ${item.id}`;
-    $('#entityDetailTitle').textContent = item.title;
+    let detail = item;
+    let versions = item.sql_versions || [];
+    if (state.apiAvailable) {
+      try {
+        detail = await apiRequest(`/api/data-requests/${item.id}`);
+        versions = detail.sql_versions || [];
+        state.currentDetail = { type, item: detail };
+      } catch (_) {}
+    }
+    $('#entityDetailEyebrow').textContent = `DATA REQUEST / ${detail.id}`;
+    $('#entityDetailTitle').textContent = detail.title;
     addDetailSummary('状态', status[0]);
-    addDetailSummary('期望日期', item.due_at ? formatDate(item.due_at).slice(0, 10) : '未设置');
-    addDetailSummary('提出时间', formatDate(item.created_at).slice(0, 10));
-    addDetailSection('数据范围', item.scope || '暂未填写数据范围。');
-    addDetailSection('口径说明', item.caliber_notes || '暂未填写统计口径。');
-    addRequestSqlSection(item);
-    addDetailSection('推进信息', '', [
-      ['用途 / 项目', item.purpose || '未填写'],
-      ['下一步', item.next_action || '待安排'],
-      ['请求编号', item.id],
+    addDetailSummary('需求人', detail.requester || '未填写');
+    addDetailSummary('SQL 版本', detail.sql_current_version || 'v1.0');
+    addDetailSection('数据范围', detail.scope || '暂未填写数据范围。');
+    addDetailSection('口径说明', detail.caliber_notes || '暂未填写统计口径。');
+    addRequestSqlSection(detail, versions);
+    addDetailSection('存档信息', '', [
+      ['用途说明', detail.purpose || '未填写'],
+      ['部门', detail.department || '未填写'],
+      ['期望日期', detail.due_at ? formatDate(detail.due_at).slice(0, 10) : '未设置'],
+      ['请求编号', detail.id],
     ]);
-    addRequestRelationSection(item);
   } else if (type === 'note') {
     $('#entityDetailEyebrow').textContent = `WORKING NOTE / ${item.id}`;
     $('#entityDetailTitle').textContent = item.title;
@@ -2340,38 +2329,109 @@ $('#noteBatchDelete').addEventListener('click', async () => {
   } catch (error) { showToast(error.message); }
 });
 
-function openRequestForm(request = null) {
+function bumpRequestSqlVersionLabel(current = 'v1.0') {
+  const match = String(current || 'v1.0').match(/^(.*?)(\d+)(\D*)$/);
+  if (!match) return 'v1.1';
+  const next = String(Number(match[2]) + 1);
+  return `${match[1]}${next.padStart(match[2].length, '0')}${match[3]}`;
+}
+
+function syncRequestSqlVersionHint(version) {
+  const label = version || $('#requestSqlVersion')?.value?.trim() || 'v1.0';
+  if ($('#requestSqlVersionHint')) $('#requestSqlVersionHint').textContent = `当前 ${label}`;
+  if ($('#requestSqlVersion') && !$('#requestSqlVersion').value.trim()) $('#requestSqlVersion').value = label;
+}
+
+function renderRequestSqlVersionList(versions = []) {
+  const panel = $('#requestSqlVersionPanel');
+  const list = $('#requestSqlVersionList');
+  if (!panel || !list) return;
+  list.replaceChildren();
+  if (!versions.length) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const current = $('#requestSqlVersion')?.value?.trim() || '';
+  versions.forEach(version => {
+    const row = make('div');
+    const copy = make('span');
+    const mark = version.version === current ? ' · 当前' : '';
+    copy.append(
+      make('strong', '', `${version.version}${mark}`),
+      make('small', '', `${formatDate(version.created_at)} · ${version.change_summary || '无说明'}`),
+    );
+    const actions = make('div', 'batch-actions');
+    const restore = make('button', 'secondary-button');
+    restore.type = 'button';
+    restore.textContent = '恢复此版本';
+    restore.disabled = version.version === current;
+    restore.addEventListener('click', async () => {
+      const requestId = $('#requestId')?.value;
+      if (!requestId) return;
+      try {
+        const updated = await apiRequest(`/api/data-requests/${requestId}/sql-versions/${version.id}/restore`, { method: 'POST' });
+        $('#requestSqlText').value = updated.sql_text || '';
+        $('#requestSqlVersion').value = updated.sql_current_version || version.version;
+        syncRequestSqlVersionHint(updated.sql_current_version || version.version);
+        await refreshRequestSqlVersions(requestId);
+        const idx = state.requests.findIndex(item => item.id === requestId);
+        if (idx >= 0) state.requests[idx] = { ...state.requests[idx], ...updated };
+        renderRequests();
+        renderTodayRequests();
+        showToast(`已恢复 ${version.version}`);
+      } catch (error) {
+        showToast(error.message);
+      }
+    });
+    actions.append(restore);
+    row.append(copy, actions);
+    list.append(row);
+  });
+}
+
+async function refreshRequestSqlVersions(requestId) {
+  if (!requestId || !state.apiAvailable) {
+    renderRequestSqlVersionList([]);
+    return [];
+  }
+  const versions = await loadRequestSqlVersions(requestId);
+  renderRequestSqlVersionList(versions);
+  return versions;
+}
+
+async function openRequestForm(request = null) {
   $('#requestForm').reset();
-  $('#requestId').value = request?.id || '';
-  $('#requestModalTitle').textContent = request ? '编辑数据请求' : '新建数据请求';
-  $('#requestTitle').value = request?.title || '';
-  $('#requestPurpose').value = request?.purpose || '';
-  $('#requestDue').value = request?.due_at?.slice(0, 10) || '';
-  $('#requestScope').value = request?.scope || '';
-  $('#requestCaliber').value = request?.caliber_notes || '';
-  $('#requestStatus').value = request?.status || 'pending';
-  $('#requestNextAction').value = request?.next_action || '';
-  fillProjectSelect($('#requestProject'), request?.related_project_id || '');
-  syncRequestProjectJump();
-  bindSqlPicker('requestSqlIds', 'requestSqlChips', 'requestSqlAdd');
-  setSqlPicker('requestSqlIds', 'requestSqlChips', 'requestSqlAdd', request?.related_sql_ids || []);
-  if ($('#requestRequester')) $('#requestRequester').value = request?.requester || '';
-  if ($('#requestDepartment')) $('#requestDepartment').value = request?.department || '';
-  if ($('#requestWaitingOn')) $('#requestWaitingOn').value = request?.waiting_on || '';
-  if ($('#requestDeliveryMethod')) $('#requestDeliveryMethod').value = request?.delivery_method || '';
-  if ($('#requestDeliveryLocation')) $('#requestDeliveryLocation').value = request?.delivery_location || '';
-  if ($('#requestSensitiveNotes')) $('#requestSensitiveNotes').value = request?.sensitive_notes || '';
-  if ($('#requestSqlText')) $('#requestSqlText').value = request?.sql_text || '';
-  $('#deleteRequestButton').hidden = !request;
+  let detail = request;
+  if (request?.id && state.apiAvailable) {
+    try {
+      detail = await apiRequest(`/api/data-requests/${request.id}`);
+    } catch (_) {
+      detail = request;
+    }
+  }
+  $('#requestId').value = detail?.id || '';
+  $('#requestModalTitle').textContent = detail?.id ? '编辑数据请求' : '新建数据请求';
+  $('#requestTitle').value = detail?.title || '';
+  $('#requestPurpose').value = detail?.purpose || '';
+  $('#requestDue').value = detail?.due_at?.slice(0, 10) || '';
+  $('#requestScope').value = detail?.scope || '';
+  $('#requestCaliber').value = detail?.caliber_notes || '';
+  $('#requestStatus').value = detail?.status || 'pending';
+  if ($('#requestRequester')) $('#requestRequester').value = detail?.requester || '';
+  if ($('#requestDepartment')) $('#requestDepartment').value = detail?.department || '';
+  if ($('#requestSqlText')) $('#requestSqlText').value = detail?.sql_text || '';
+  const version = detail?.sql_current_version || 'v1.0';
+  if ($('#requestSqlVersion')) $('#requestSqlVersion').value = version;
+  syncRequestSqlVersionHint(version);
+  const saveVersionBtn = $('#saveRequestSqlVersionButton');
+  if (saveVersionBtn) saveVersionBtn.hidden = !detail?.id;
+  $('#deleteRequestButton').hidden = !detail?.id;
+  if (detail?.id) await refreshRequestSqlVersions(detail.id);
+  else renderRequestSqlVersionList([]);
   openModal($('#requestModal'));
   setTimeout(() => $('#requestTitle').focus(), 20);
 }
-
-$('#requestProject')?.addEventListener('change', syncRequestProjectJump);
-$('#requestProjectJump')?.addEventListener('click', () => {
-  const projectId = $('#requestProject')?.value?.trim();
-  if (projectId) jumpToProject(projectId);
-});
 
 function renderRequests() {
   const rows = $('#requestRows'); rows.replaceChildren();
@@ -2382,7 +2442,7 @@ function renderRequests() {
   const to = $('#requestFilterTo')?.value || '';
   const items = state.requests.filter(item => {
     const statusMatch = state.requestStatus === 'all' || item.status === state.requestStatus;
-    const searchMatch = !query || `${item.id} ${item.title} ${item.purpose} ${item.scope} ${item.requester || ''} ${item.department || ''}`.toLowerCase().includes(query);
+    const searchMatch = !query || `${item.id} ${item.title} ${item.purpose} ${item.scope} ${item.requester || ''} ${item.department || ''} ${item.sql_text || ''}`.toLowerCase().includes(query);
     const requesterMatch = !requester || String(item.requester || '').toLowerCase().includes(requester);
     const departmentMatch = !department || String(item.department || '').toLowerCase().includes(department);
     const day = String(item.created_at || '').slice(0, 10);
@@ -2400,7 +2460,14 @@ function renderRequests() {
     const meta = [item.id, item.requester || item.department, item.scope || '未填写数据范围'].filter(Boolean).join(' · ');
     const title = make('span', 'row-click'); title.append(make('strong', '', item.title), make('small', '', meta));
     const status = requestStatus[item.status] || [item.status, 'waiting'];
-    row.append(checkLabel, title, make('span', 'row-click', item.purpose || '未关联用途'), make('span', 'row-click', formatDate(item.created_at).slice(0, 10)), make('span', 'row-click', item.next_action || '待安排'), make('span', `status ${status[1]}`, status[0]));
+    row.append(
+      checkLabel,
+      title,
+      make('span', 'row-click', item.purpose || '未填用途'),
+      make('span', 'row-click', formatDate(item.created_at).slice(0, 10)),
+      make('span', 'row-click', item.sql_current_version || 'v1.0'),
+      make('span', `status ${status[1]}`, status[0]),
+    );
     $$('.row-click', row).forEach(cell => cell.addEventListener('click', () => openEntityDrawer('data_request', item)));
     rows.append(row);
   });
@@ -2465,23 +2532,24 @@ $('#requestForm').addEventListener('submit', async event => {
   event.preventDefault();
   const id = $('#requestId').value;
   const payload = {
-    title: $('#requestTitle').value.trim(), purpose: $('#requestPurpose').value.trim(), scope: $('#requestScope').value.trim(),
-    caliber_notes: $('#requestCaliber').value.trim(), due_at: $('#requestDue').value || null, status: $('#requestStatus').value,
-    next_action: $('#requestNextAction').value.trim(), related_sql_ids: splitValues($('#requestSqlIds').value),
-    related_project_id: $('#requestProject').value.trim() || null,
+    title: $('#requestTitle').value.trim(),
+    purpose: $('#requestPurpose').value.trim(),
+    scope: $('#requestScope').value.trim(),
+    caliber_notes: $('#requestCaliber').value.trim(),
+    due_at: $('#requestDue').value || null,
+    status: $('#requestStatus').value,
     requester: $('#requestRequester')?.value.trim() || '',
     department: $('#requestDepartment')?.value.trim() || '',
-    waiting_on: $('#requestWaitingOn')?.value.trim() || '',
-    delivery_method: $('#requestDeliveryMethod')?.value.trim() || '',
-    delivery_location: $('#requestDeliveryLocation')?.value.trim() || '',
-    sensitive_notes: $('#requestSensitiveNotes')?.value.trim() || '',
     sql_text: $('#requestSqlText')?.value || '',
+    sql_current_version: $('#requestSqlVersion')?.value.trim() || 'v1.0',
   };
   try {
     await apiRequest(id ? `/api/data-requests/${id}` : '/api/data-requests', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
     closeModal($('#requestModal')); await refreshRequests(); showToast(id ? '数据请求已更新' : '数据请求已创建');
   } catch (error) { showToast(error.message); }
 });
+
+$('#requestSqlVersion')?.addEventListener('input', () => syncRequestSqlVersionHint($('#requestSqlVersion').value.trim()));
 
 $('#copyRequestSql')?.addEventListener('click', async () => {
   const text = $('#requestSqlText')?.value || '';
@@ -2490,6 +2558,42 @@ $('#copyRequestSql')?.addEventListener('click', async () => {
     await navigator.clipboard.writeText(text);
     showToast('SQL 已复制');
   } catch (_) { showToast('复制失败，请手动选择文本'); }
+});
+
+$('#saveRequestSqlVersionButton')?.addEventListener('click', () => {
+  const requestId = $('#requestId')?.value;
+  if (!requestId) { showToast('请先保存数据请求，再另存 SQL 版本'); return; }
+  const sqlText = $('#requestSqlText')?.value || '';
+  if (!sqlText.trim()) { showToast('请先填写 SQL 代码'); return; }
+  $('#requestSqlVersionForm').reset();
+  $('#requestNewSqlVersion').value = bumpRequestSqlVersionLabel($('#requestSqlVersion')?.value || 'v1.0');
+  $('#requestSqlChangeSummary').value = '';
+  openModal($('#requestSqlVersionModal'));
+  setTimeout(() => $('#requestNewSqlVersion').focus(), 20);
+});
+
+$('#requestSqlVersionForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const requestId = $('#requestId')?.value;
+  if (!requestId) return;
+  const version = $('#requestNewSqlVersion')?.value.trim();
+  const changeSummary = $('#requestSqlChangeSummary')?.value.trim() || '';
+  const sqlText = $('#requestSqlText')?.value || '';
+  if (!version) { showToast('请填写版本号'); return; }
+  try {
+    await apiRequest(`/api/data-requests/${requestId}/sql-versions`, {
+      method: 'POST',
+      body: JSON.stringify({ version, sql_text: sqlText, change_summary: changeSummary }),
+    });
+    $('#requestSqlVersion').value = version;
+    syncRequestSqlVersionHint(version);
+    closeModal($('#requestSqlVersionModal'));
+    await refreshRequestSqlVersions(requestId);
+    await refreshRequests();
+    showToast(`已保存 SQL 版本 ${version}`);
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
 async function batchRequest(path, success) {

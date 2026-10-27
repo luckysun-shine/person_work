@@ -4,7 +4,7 @@
 
 `工作请求 → 周计划 / 日程 → SQL 取数 → 模型维护 → 审监监测台账 → 记录复盘 → 周报输出`
 
-正式应用位于 [`audit-ai-workbench-ui/workbench-v2`](audit-ai-workbench-ui/workbench-v2)，当前版本 **v1.9.29**。
+正式应用位于 [`audit-ai-workbench-ui/workbench-v2`](audit-ai-workbench-ui/workbench-v2)，当前版本 **v1.9.30**。
 
 界面主题：**Soft Welcome**。同一套页面同时适配 **电脑浏览器** 与 **手机浏览器**（底部快捷栏 + 抽屉导航）。
 
@@ -57,7 +57,7 @@ docker compose up -d --build
 
 ## 能力概览
 
-- 审监监测台账、本周计划（日程+待办）、数据请求 SQL 记录
+- 审监监测台账、本周计划（日程+待办）、数据请求独立存档与 SQL 多版本
 - Soft Welcome 响应式：电脑顶栏导航 / 手机底栏+抽屉
 - FastAPI + SQLite；备份恢复；钉钉 CalDAV / ICS；可选访问密码
 - **不连接、不执行**真实业务库 SQL

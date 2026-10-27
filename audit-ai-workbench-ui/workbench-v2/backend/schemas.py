@@ -484,16 +484,10 @@ class DataRequestCreate(BaseModel):
     caliber_notes: str = Field(default="", max_length=4000)
     due_at: str | None = None
     status: RequestStatus = "pending"
-    next_action: str = Field(default="", max_length=1000)
-    related_sql_ids: list[str] = Field(default_factory=list, max_length=100)
-    related_project_id: str | None = Field(default=None, max_length=80)
     requester: str = Field(default="", max_length=100)
     department: str = Field(default="", max_length=100)
-    waiting_on: str = Field(default="", max_length=100)
-    delivery_method: str = Field(default="", max_length=100)
-    delivery_location: str = Field(default="", max_length=1000)
-    sensitive_notes: str = Field(default="", max_length=2000)
     sql_text: str = Field(default="", max_length=200000)
+    sql_current_version: str = Field(default="v1.0", min_length=1, max_length=40)
 
 
 class DataRequestUpdate(BaseModel):
@@ -503,16 +497,16 @@ class DataRequestUpdate(BaseModel):
     caliber_notes: str | None = Field(default=None, max_length=4000)
     due_at: str | None = None
     status: RequestStatus | None = None
-    next_action: str | None = Field(default=None, max_length=1000)
-    related_sql_ids: list[str] | None = Field(default=None, max_length=100)
-    related_project_id: str | None = Field(default=None, max_length=80)
     requester: str | None = Field(default=None, max_length=100)
     department: str | None = Field(default=None, max_length=100)
-    waiting_on: str | None = Field(default=None, max_length=100)
-    delivery_method: str | None = Field(default=None, max_length=100)
-    delivery_location: str | None = Field(default=None, max_length=1000)
-    sensitive_notes: str | None = Field(default=None, max_length=2000)
     sql_text: str | None = Field(default=None, max_length=200000)
+    sql_current_version: str | None = Field(default=None, min_length=1, max_length=40)
+
+
+class DataRequestSqlVersionCreate(BaseModel):
+    version: str = Field(min_length=1, max_length=40)
+    sql_text: str = Field(default="", max_length=200000)
+    change_summary: str = Field(default="", max_length=2000)
 
 
 class BatchIds(BaseModel):

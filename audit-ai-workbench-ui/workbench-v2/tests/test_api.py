@@ -493,16 +493,21 @@ class ApiTestCase(unittest.TestCase):
                 "purpose": "支持审计抽样",
                 "scope": "2026 年付款数据",
                 "due_at": "2026-10-28",
-                "related_sql_ids": ["Q-128"],
+                "requester": "李四",
+                "sql_text": "SELECT 1",
+                "sql_current_version": "v1.0",
             },
         )
         self.assertEqual(created.status_code, 201)
-        request_id = created.json()["id"]
+        body = created.json()
+        request_id = body["id"]
+        self.assertEqual(body["sql_current_version"], "v1.0")
+        self.assertEqual(len(body.get("sql_versions") or []), 1)
         updated = self.client.patch(
             f"/api/data-requests/{request_id}",
-            json={"next_action": "确认字段口径"},
+            json={"purpose": "确认字段口径", "sql_text": "SELECT 2"},
         )
-        self.assertEqual(updated.json()["next_action"], "确认字段口径")
+        self.assertEqual(updated.json()["purpose"], "确认字段口径")
         batched = self.client.post(
             "/api/data-requests/batch-status",
             json={"ids": [request_id], "status": "done"},
@@ -744,26 +749,57 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(done_bucket.status_code, 200)
         self.assertTrue(any(item["id"] == created.json()["id"] for item in done_bucket.json()["tasks"]))
 
-    def test_data_request_extra_fields(self):
+    def test_data_request_sql_versions(self):
         created = self.client.post(
             "/api/data-requests",
             json={
-                "title": "带交付信息的请求",
-                "purpose": "测试",
+                "title": "带 SQL 版本的请求",
+                "purpose": "日常取数存档",
                 "requester": "张三",
                 "department": "审计监察部",
-                "waiting_on": "数据组",
-                "delivery_method": "共享盘",
-                "delivery_location": "\\\\files\\audit\\demo",
-                "sensitive_notes": "含手机号需脱敏",
                 "status": "waiting",
+                "sql_text": "SELECT id FROM demo",
+                "sql_current_version": "v1.0",
             },
         )
         self.assertEqual(created.status_code, 201)
         body = created.json()
-        self.assertEqual(body["waiting_on"], "数据组")
-        self.assertEqual(body["delivery_method"], "共享盘")
-        self.assertIn("脱敏", body["sensitive_notes"])
+        request_id = body["id"]
+        self.assertEqual(body["requester"], "张三")
+        self.assertEqual(body["department"], "审计监察部")
+        self.assertEqual(body["sql_current_version"], "v1.0")
+
+        version = self.client.post(
+            f"/api/data-requests/{request_id}/sql-versions",
+            json={
+                "version": "v1.1",
+                "sql_text": "SELECT id, name FROM demo",
+                "change_summary": "补充姓名字段",
+            },
+        )
+        self.assertEqual(version.status_code, 201)
+        detail = self.client.get(f"/api/data-requests/{request_id}")
+        self.assertEqual(detail.status_code, 200)
+        payload = detail.json()
+        self.assertEqual(payload["sql_current_version"], "v1.1")
+        self.assertIn("name", payload["sql_text"])
+        self.assertGreaterEqual(len(payload.get("sql_versions") or []), 2)
+
+        first_version_id = next(
+            item["id"] for item in payload["sql_versions"] if item["version"] == "v1.0"
+        )
+        restored = self.client.post(
+            f"/api/data-requests/{request_id}/sql-versions/{first_version_id}/restore"
+        )
+        self.assertEqual(restored.status_code, 200)
+        self.assertEqual(restored.json()["sql_current_version"], "v1.0")
+        self.assertEqual(restored.json()["sql_text"], "SELECT id FROM demo")
+
+        duplicate = self.client.post(
+            f"/api/data-requests/{request_id}/sql-versions",
+            json={"version": "v1.1", "sql_text": "SELECT 3", "change_summary": "重复"},
+        )
+        self.assertEqual(duplicate.status_code, 409)
 
     def test_sql_diff_and_sensitive_check(self):
         asset = self.client.post(

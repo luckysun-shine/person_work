@@ -2148,6 +2148,19 @@ body.theme-soft-welcome .request-sql-detail .section-title {
 body.theme-soft-welcome .request-sql-detail .sql-code-shell {
   margin-top: 0;
 }
+body.theme-soft-welcome .request-sql-version-panel {
+  margin-top: 4px;
+}
+body.theme-soft-welcome .request-sql-version-panel h3 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+body.theme-soft-welcome .request-sql-version-panel .soft-history > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
 body.theme-soft-welcome .soft-history > div {
   border-radius: 12px;
   padding: 10px 12px;

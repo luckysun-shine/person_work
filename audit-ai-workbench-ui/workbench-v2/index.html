@@ -13,7 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='10' fill='%231C1C1C'/%3E%3Cpath d='M18 6.5 27.5 10.2v7.2c0 6.1-4 10.6-9.5 12.4-5.5-1.8-9.5-6.3-9.5-12.4v-7.2L18 6.5Z' fill='none' stroke='%23F5C84B' stroke-width='1.9' stroke-linejoin='round'/%3E%3Cpath d='M13.5 20.5v-4m4.5 4v-7m4.5 7v-2.5' stroke='%23FFF1C2' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='22.5' cy='13.5' r='1.7' fill='%23F5C84B'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css?v=1.0.0">
   <link rel="stylesheet" href="ui-apple-hig.css?v=1.9.17">
-  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.17">
+  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.18">
 </head>
 <body class="theme-soft-welcome">
   <div class="app-shell">
@@ -318,12 +318,12 @@
         </section>
 
         <section class="view" id="view-requests" data-title="数据请求">
-          <div class="page-head soft-page-head"><div><p class="eyebrow">REQUEST INBOX</p><h1>数据请求</h1><p>记录需求口径、查询过程、交付结果和复用资产。</p></div><button class="primary-button" id="newRequestButton"><svg><use href="#i-plus"/></svg>新建请求</button></div>
+          <div class="page-head soft-page-head"><div><p class="eyebrow">REQUEST ARCHIVE</p><h1>数据请求</h1><p>独立存档同事日常取数需求：主题、口径与 SQL 版本。</p></div><button class="primary-button" id="newRequestButton"><svg><use href="#i-plus"/></svg>新建请求</button></div>
           <div class="summary-line soft-summary"><div><strong>0</strong><span>全部请求</span></div><div><strong>0</strong><span>处理中</span></div><div><strong>0</strong><span>等待确认</span></div><div><strong>0</strong><span>本月已交付</span></div><p>平均交付用时 <strong id="requestAverageDays">—</strong></p></div>
           <div class="list-toolbar request-filter-bar soft-list-toolbar"><div class="filter-tabs" id="requestStatusFilters"><button class="active" data-status="all">全部</button><button data-status="pending">待处理</button><button data-status="waiting">待确认</button><button data-status="working">处理中</button><button data-status="done">已交付</button></div><div class="batch-actions"><button class="secondary-button" id="requestBatchDone" disabled>批量完成</button><button class="secondary-button danger-button" id="requestBatchDelete" disabled>删除所选</button><div class="inline-search"><svg><use href="#i-search"/></svg><input id="requestSearch" placeholder="搜索主题、用途或编号"></div></div></div>
           <div class="form-grid request-advanced-filters soft-advanced-filters"><label>需求人<input id="requestFilterRequester" placeholder="姓名"></label><label>部门<input id="requestFilterDepartment" placeholder="部门"></label><label>开始日期<input id="requestFilterFrom" type="date"></label><label>结束日期<input id="requestFilterTo" type="date"></label><div class="batch-actions"><button class="secondary-button" id="requestFilterApply" type="button">组合筛选</button><button class="text-button" id="requestFilterReset" type="button">重置</button></div></div>
           <div class="data-list request-list soft-data-list">
-            <div class="data-list-head"><span></span><span>请求主题</span><span>用途 / 项目</span><span>提出时间</span><span>下一步</span><span>状态</span></div>
+            <div class="data-list-head"><span></span><span>请求主题</span><span>用途说明</span><span>提出时间</span><span>SQL 版本</span><span>状态</span></div>
             <div id="requestRows"></div>
           </div>
         </section>
@@ -585,7 +585,72 @@
 
   <div class="modal" id="recordModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="recordForm"><header><div><p class="eyebrow">WORKING NOTE</p><h2 id="recordModalTitle">新建工作记录</h2></div><div class="modal-header-actions"><button type="button" class="secondary-button" id="toggleNotePreview">预览</button><button type="button" class="secondary-button smart-button" id="analyzeNoteButton"><svg><use href="#i-model"/></svg>智能整理</button><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></div></header><input type="hidden" id="recordId"><div class="form-grid modal-form-grid note-form-grid"><label>记录类型<select id="recordType"><option>随手记录</option><option>口径说明</option><option>问题排查</option><option>模型维护</option><option>项目复盘</option></select></label><div class="note-flag-row" role="group" aria-label="记录标记"><label class="flag-chip"><input id="recordFavorite" type="checkbox"><span>收藏</span></label><label class="flag-chip"><input id="recordArchived" type="checkbox"><span>归档</span></label></div><label class="span-2">标题<input id="recordTitle" required maxlength="200" placeholder="一句话说明这条记录"></label><label class="span-2 markdown-editor-label">内容<div class="markdown-toolbar" id="markdownToolbar"><button type="button" data-md="bold"><b>B</b></button><button type="button" data-md="italic"><i>I</i></button><button type="button" data-md="ul">列表</button><button type="button" data-md="code">代码</button><button type="button" data-md="link">链接</button><button type="button" data-md="h2">标题</button></div><textarea id="recordContent" class="note-content-input" rows="16" placeholder="支持 Markdown：标题、列表、粗体、代码块、链接…"></textarea><div class="markdown-preview" id="recordPreview" hidden></div></label><label>标签<input id="recordTags" placeholder="多个标签用逗号分隔"></label><label>关联对象<input id="recordRelation" list="entityRelationOptions" placeholder="选择或输入关联对象" autocomplete="off"></label></div><section class="assistant-panel" id="noteAssistPanel" hidden><div class="assistant-panel-head"><div><strong>智能整理建议</strong><span id="noteAssistConfidence"></span></div><button type="button" id="applyNoteAssist">应用建议</button></div><div class="assistant-suggestion-grid" id="noteAssistSummary"></div><div class="similar-note-list" id="similarNoteList"></div><p>建议仅填入当前表单，保存前仍可修改。</p></section><section id="noteRevisionPanel" hidden><h3>修改历史</h3><div id="noteRevisionList" class="history-list"></div></section><footer><button type="button" class="secondary-button modal-close">取消</button><button type="button" class="secondary-button danger-button" id="deleteNoteButton" hidden>删除</button><button type="submit" class="primary-button">保存记录</button></footer></form></div>
 
-  <div class="modal" id="requestModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="requestForm"><header><div><p class="eyebrow">DATA REQUEST</p><h2 id="requestModalTitle">新建数据请求</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="requestId"><div class="form-grid modal-form-grid"><label class="span-2">请求主题<input id="requestTitle" required placeholder="例如：采购付款明细"></label><label>用途 / 项目<input id="requestPurpose" placeholder="例如：采购审计"></label><label>期望日期<input id="requestDue" type="date"></label><label>需求人<input id="requestRequester"></label><label>部门<input id="requestDepartment"></label><label>等待对象<input id="requestWaitingOn" placeholder="待确认时填写"></label><label>交付方式<input id="requestDeliveryMethod" placeholder="邮件/共享盘/系统"></label><label class="span-2">交付位置<input id="requestDeliveryLocation" placeholder="路径或链接"></label><label class="span-2">敏感说明<textarea id="requestSensitiveNotes" class="soft-area" rows="3" placeholder="敏感字段、脱敏方式、保存期限…"></textarea></label><label class="span-2">数据范围<textarea id="requestScope" class="soft-area" rows="5" placeholder="字段、时间范围、组织范围…"></textarea></label><label class="span-2">口径说明<textarea id="requestCaliber" class="soft-area" rows="5" placeholder="统计口径、排除项、待确认事项…"></textarea></label><label class="span-2">SQL 代码记录<div class="request-sql-record"><div class="request-sql-toolbar"><span class="sql-lang-badge">SQL</span><button type="button" class="copy-button" id="copyRequestSql"><svg><use href="#i-copy"/></svg><span>复制</span></button></div><textarea id="requestSqlText" class="code-input" rows="12" spellcheck="false" placeholder="粘贴本次取数用到的 SQL，便于复盘与复用…"></textarea></div></label><p class="form-hint span-2">此处仅保存本次请求的 SQL 文本，不会连接或执行数据库；需要沉淀为资产时可另选「关联 SQL」。</p><label>状态<select id="requestStatus"><option value="pending">待处理</option><option value="waiting">待确认</option><option value="working">处理中</option><option value="done">已交付</option><option value="archived">已归档</option></select></label><label>下一步<input id="requestNextAction" placeholder="下一步动作"></label><label class="span-2">关联 SQL 资产<div class="assoc-picker" data-sql-picker="requestSqlIds"><input type="hidden" id="requestSqlIds" value=""><div class="assoc-chips" id="requestSqlChips"></div><select id="requestSqlAdd" class="assoc-add"><option value="">添加 SQL 资产…</option></select></div></label><label>关联项目<div class="assoc-field-row"><select id="requestProject"><option value="">未关联</option></select><button type="button" class="secondary-button assoc-jump-btn" id="requestProjectJump" disabled>打开项目</button></div></label></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="button" class="secondary-button danger-button" id="deleteRequestButton" hidden>删除</button><button type="submit" class="primary-button">保存请求</button></footer></form></div>
+  <div class="modal" id="requestModal" aria-hidden="true">
+    <form class="modal-card modal-card-sheet" id="requestForm">
+      <header>
+        <div><p class="eyebrow">DATA REQUEST</p><h2 id="requestModalTitle">新建数据请求</h2></div>
+        <button type="button" class="icon-button modal-close" aria-label="关闭"><svg><use href="#i-close"/></svg></button>
+      </header>
+      <input type="hidden" id="requestId">
+      <div class="form-grid modal-form-grid">
+        <label class="span-2">请求主题<input id="requestTitle" required placeholder="例如：经销商发货业绩明细"></label>
+        <label>用途说明<input id="requestPurpose" placeholder="例如：月度复盘 / 同事临时取数"></label>
+        <label>期望日期<input id="requestDue" type="date"></label>
+        <label>需求人<input id="requestRequester" placeholder="同事姓名"></label>
+        <label>部门<input id="requestDepartment"></label>
+        <label>状态
+          <select id="requestStatus">
+            <option value="pending">待处理</option>
+            <option value="waiting">待确认</option>
+            <option value="working">处理中</option>
+            <option value="done">已交付</option>
+            <option value="archived">已归档</option>
+          </select>
+        </label>
+        <label>当前 SQL 版本<input id="requestSqlVersion" value="v1.0" placeholder="v1.0"></label>
+        <label class="span-2">数据范围<textarea id="requestScope" class="soft-area" rows="4" placeholder="字段、时间范围、组织范围…"></textarea></label>
+        <label class="span-2">口径说明<textarea id="requestCaliber" class="soft-area" rows="4" placeholder="统计口径、排除项、待确认事项…"></textarea></label>
+        <label class="span-2">SQL 代码
+          <div class="request-sql-record">
+            <div class="request-sql-toolbar">
+              <span class="sql-lang-badge">SQL</span>
+              <span class="soft-result-hint" id="requestSqlVersionHint">当前 v1.0</span>
+              <button type="button" class="copy-button" id="copyRequestSql"><svg><use href="#i-copy"/></svg><span>复制</span></button>
+              <button type="button" class="secondary-button" id="saveRequestSqlVersionButton" hidden>另存新版本</button>
+            </div>
+            <textarea id="requestSqlText" class="code-input" rows="12" spellcheck="false" placeholder="粘贴本次取数 SQL，可按版本留存…"></textarea>
+          </div>
+        </label>
+        <div class="span-2 request-sql-version-panel" id="requestSqlVersionPanel" hidden>
+          <h3>SQL 版本历史</h3>
+          <div id="requestSqlVersionList" class="history-list soft-history"></div>
+        </div>
+      </div>
+      <p class="form-hint">数据请求为独立存档，只保存文本与版本，不会连接或执行数据库。</p>
+      <footer>
+        <button type="button" class="secondary-button modal-close">取消</button>
+        <button type="button" class="secondary-button danger-button" id="deleteRequestButton" hidden>删除</button>
+        <button type="submit" class="primary-button">保存请求</button>
+      </footer>
+    </form>
+  </div>
+
+  <div class="modal" id="requestSqlVersionModal" aria-hidden="true">
+    <form class="modal-card modal-card-wide" id="requestSqlVersionForm">
+      <header>
+        <div><p class="eyebrow">SQL VERSION</p><h2>另存 SQL 新版本</h2></div>
+        <button type="button" class="icon-button modal-close" aria-label="关闭"><svg><use href="#i-close"/></svg></button>
+      </header>
+      <div class="form-grid modal-form-grid">
+        <label>版本号<input id="requestNewSqlVersion" required placeholder="例如 v1.1"></label>
+        <label class="span-2">变更说明<textarea id="requestSqlChangeSummary" class="soft-area" rows="3" placeholder="说明本次调整口径或字段变化"></textarea></label>
+      </div>
+      <footer>
+        <button type="button" class="secondary-button modal-close">取消</button>
+        <button type="submit" class="primary-button">保存版本</button>
+      </footer>
+    </form>
+  </div>
 
   <div class="modal" id="sqlModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="sqlForm"><header><div><p class="eyebrow">SQL ASSET</p><h2 id="sqlModalTitle">新建 SQL 资产</h2></div><div class="modal-header-actions"><button type="button" class="secondary-button smart-button" id="analyzeSqlButton"><svg><use href="#i-model"/></svg>生成说明</button><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></div></header><input type="hidden" id="sqlId"><div class="form-grid modal-form-grid"><label class="span-2">查询名称<input id="sqlName" required placeholder="例如：采购付款异常明细"></label><label>版本<input id="sqlCurrentVersion" value="v1.0"></label><label>状态<select id="sqlStatus"><option value="draft">草稿</option><option value="validated">已验证</option><option value="archived">已归档</option></select></label><label class="span-2">用途说明<textarea id="sqlPurpose" class="soft-area" rows="3"></textarea></label><label>标签<input id="sqlTags" placeholder="采购, 付款"></label><label>涉及表<input id="sqlTables" placeholder="dwd.payment, dim.vendor"></label><label>关联项目<select id="sqlProject"><option value="">未关联</option></select></label><label>验证说明<input id="sqlValidationNote" placeholder="样本复核结果"></label><label class="span-2">SQL 文本<textarea id="sqlText" class="code-input" rows="16" spellcheck="false" placeholder="SELECT ..."></textarea></label></div><section class="assistant-panel sql-assistant-panel" id="sqlAssistPanel" hidden><div class="assistant-panel-head"><div><strong>SQL 说明与风险建议</strong><span id="sqlAssistLevel"></span></div><button type="button" id="applySqlAssist">应用建议</button></div><div class="assistant-suggestion-grid" id="sqlAssistSummary"></div><ul id="sqlRiskList"></ul><p>分析过程不会连接数据库或执行 SQL。</p></section><p class="form-hint">安全说明：工作台只保存 SQL 文本，不连接数据库，也不会执行查询。</p><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存 SQL</button></footer></form></div>
 
@@ -896,7 +961,7 @@
     <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 16H3V4h12v1"/></symbol>
   </svg>
   <datalist id="entityRelationOptions"></datalist>
-  <script src="app.js?v=1.9.29"></script>
+  <script src="app.js?v=1.9.30"></script>
 </body>
 </html>
 

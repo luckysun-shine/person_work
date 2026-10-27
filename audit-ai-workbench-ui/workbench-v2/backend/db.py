@@ -138,8 +138,20 @@ CREATE TABLE IF NOT EXISTS data_requests (
     delivery_location TEXT NOT NULL DEFAULT '',
     sensitive_notes TEXT NOT NULL DEFAULT '',
     sql_text TEXT NOT NULL DEFAULT '',
+    sql_current_version TEXT NOT NULL DEFAULT 'v1.0',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS data_request_sql_versions (
+    id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    version TEXT NOT NULL,
+    sql_text TEXT NOT NULL DEFAULT '',
+    change_summary TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (request_id) REFERENCES data_requests(id) ON DELETE CASCADE,
+    UNIQUE (request_id, version)
 );
 
 CREATE TABLE IF NOT EXISTS monitoring_models (
@@ -516,8 +528,21 @@ def init_db(db_path: Path | None = None) -> None:
             ("delivery_location", "TEXT NOT NULL DEFAULT ''"),
             ("sensitive_notes", "TEXT NOT NULL DEFAULT ''"),
             ("sql_text", "TEXT NOT NULL DEFAULT ''"),
+            ("sql_current_version", "TEXT NOT NULL DEFAULT 'v1.0'"),
         ):
             ensure_column(connection, "data_requests", column, definition)
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS data_request_sql_versions (
+                id TEXT PRIMARY KEY,
+                request_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                sql_text TEXT NOT NULL DEFAULT '',
+                change_summary TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (request_id) REFERENCES data_requests(id) ON DELETE CASCADE,
+                UNIQUE (request_id, version)
+            )"""
+        )
         ensure_column(connection, "tasks", "waiting_on", "TEXT NOT NULL DEFAULT ''")
         for column, definition in (
             ("completion_result", "TEXT NOT NULL DEFAULT ''"),
