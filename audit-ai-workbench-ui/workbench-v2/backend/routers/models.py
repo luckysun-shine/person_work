@@ -39,6 +39,7 @@ from ..schemas import (
     GenericReportUpsert,
     ModelCreate,
     ModelRunCreate,
+    ModelRunUpdate,
     ModelSqlVersionCreate,
     ModelUpdate,
     NavigationCreate,
@@ -290,15 +291,69 @@ def create_model_run(model_id: str, payload: ModelRunCreate) -> dict:
                 payload.result_summary, now,
             ),
         )
-        connection.execute(
-            """UPDATE monitoring_models SET last_run_at = ?, hit_count = ?,
-            pending_review_count = ?, updated_at = ? WHERE id = ?""",
-            (
-                payload.finished_at or payload.started_at,
-                payload.hit_count,
-                max(payload.hit_count - payload.reviewed_count, 0),
-                now,
-                model_id,
-            ),
-        )
+        _sync_model_run_stats(connection, model_id, now)
     return C.fetch_one("SELECT * FROM model_runs WHERE id = ?", (run_id,))
+
+
+def _sync_model_run_stats(connection, model_id: str, now: str) -> None:
+    """以时间最新的一次运行为准回写模型统计；补录历史运行不会覆盖最新状态。
+
+    待复核数 = 最新一次运行的命中数 - 已复核数（不低于 0）。
+    """
+    latest = connection.execute(
+        """SELECT started_at, finished_at, hit_count, reviewed_count
+        FROM model_runs WHERE model_id = ?
+        ORDER BY COALESCE(finished_at, started_at) DESC, started_at DESC, created_at DESC
+        LIMIT 1""",
+        (model_id,),
+    ).fetchone()
+    if not latest:
+        connection.execute(
+            """UPDATE monitoring_models SET last_run_at = NULL, hit_count = 0,
+            pending_review_count = 0, updated_at = ? WHERE id = ?""",
+            (now, model_id),
+        )
+        return
+    hit = int(latest["hit_count"] or 0)
+    reviewed = int(latest["reviewed_count"] or 0)
+    connection.execute(
+        """UPDATE monitoring_models SET last_run_at = ?, hit_count = ?,
+        pending_review_count = ?, updated_at = ? WHERE id = ?""",
+        (latest["finished_at"] or latest["started_at"], hit, max(hit - reviewed, 0), now, model_id),
+    )
+
+
+@router.patch("/api/models/{model_id}/runs/{run_id}")
+def update_model_run(model_id: str, run_id: str, payload: ModelRunUpdate) -> dict:
+    changes = payload.model_dump(exclude_unset=True)
+    now = utc_now()
+    with transaction() as connection:
+        run = connection.execute(
+            "SELECT * FROM model_runs WHERE id = ? AND model_id = ?", (run_id, model_id)
+        ).fetchone()
+        if not run:
+            raise HTTPException(status_code=404, detail="运行记录不存在")
+        if changes:
+            hit = int(changes.get("hit_count", run["hit_count"]) or 0)
+            reviewed = int(changes.get("reviewed_count", run["reviewed_count"]) or 0)
+            if reviewed > hit:
+                raise HTTPException(status_code=400, detail="已复核数不能超过命中数")
+            assignments = ", ".join(f"{field} = ?" for field in changes)
+            connection.execute(
+                f"UPDATE model_runs SET {assignments} WHERE id = ?",
+                (*changes.values(), run_id),
+            )
+        _sync_model_run_stats(connection, model_id, now)
+    return C.fetch_one("SELECT * FROM model_runs WHERE id = ?", (run_id,))
+
+
+@router.delete("/api/models/{model_id}/runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_model_run(model_id: str, run_id: str) -> Response:
+    with transaction() as connection:
+        result = connection.execute(
+            "DELETE FROM model_runs WHERE id = ? AND model_id = ?", (run_id, model_id)
+        )
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="运行记录不存在")
+        _sync_model_run_stats(connection, model_id, utc_now())
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

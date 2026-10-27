@@ -142,6 +142,15 @@ class ModelRunCreate(BaseModel):
     result_summary: str = Field(default="", max_length=4000)
 
 
+class ModelRunUpdate(BaseModel):
+    finished_at: str | None = None
+    status: Literal["running", "success", "failed", "cancelled"] | None = None
+    scanned_count: int | None = Field(default=None, ge=0)
+    hit_count: int | None = Field(default=None, ge=0)
+    reviewed_count: int | None = Field(default=None, ge=0)
+    result_summary: str | None = Field(default=None, max_length=4000)
+
+
 class ModelStep(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=500)

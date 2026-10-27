@@ -554,6 +554,57 @@ class ApiTestCase(unittest.TestCase):
         deleted = self.client.delete(f"/api/projects/P-009/relations/{relation_id}")
         self.assertEqual(deleted.status_code, 204)
 
+    def test_model_run_review_update_delete_and_stats_sync(self):
+        model = self.client.post("/api/models", json={"name": "运行统计测试模型"}).json()
+        model_id = model["id"]
+        newer = self.client.post(
+            f"/api/models/{model_id}/runs",
+            json={"started_at": "2026-10-22T08:00:00+08:00", "finished_at": "2026-10-22T08:10:00+08:00",
+                  "hit_count": 30, "reviewed_count": 5},
+        ).json()
+        # 补录一条更早的运行：不应覆盖最新统计
+        older = self.client.post(
+            f"/api/models/{model_id}/runs",
+            json={"started_at": "2026-10-01T08:00:00+08:00", "finished_at": "2026-10-01T08:10:00+08:00",
+                  "hit_count": 99, "reviewed_count": 0},
+        ).json()
+        detail = self.client.get(f"/api/models/{model_id}").json()
+        self.assertEqual(detail["hit_count"], 30)
+        self.assertEqual(detail["pending_review_count"], 25)
+        self.assertEqual(detail["last_run_at"], "2026-10-22T08:10:00+08:00")
+
+        too_many = self.client.patch(f"/api/models/{model_id}/runs/{newer['id']}", json={"reviewed_count": 31})
+        self.assertEqual(too_many.status_code, 400)
+        reviewed = self.client.patch(f"/api/models/{model_id}/runs/{newer['id']}", json={"reviewed_count": 30})
+        self.assertEqual(reviewed.status_code, 200)
+        self.assertEqual(self.client.get(f"/api/models/{model_id}").json()["pending_review_count"], 0)
+
+        self.assertEqual(self.client.delete(f"/api/models/{model_id}/runs/{newer['id']}").status_code, 204)
+        detail = self.client.get(f"/api/models/{model_id}").json()
+        self.assertEqual(detail["hit_count"], 99)
+        self.assertEqual(detail["pending_review_count"], 99)
+        self.assertEqual(self.client.delete(f"/api/models/{model_id}/runs/{older['id']}").status_code, 204)
+        detail = self.client.get(f"/api/models/{model_id}").json()
+        self.assertEqual(detail["hit_count"], 0)
+        self.assertIsNone(detail["last_run_at"])
+        self.assertEqual(self.client.delete(f"/api/models/{model_id}/runs/{older['id']}").status_code, 404)
+        self.client.delete(f"/api/models/{model_id}")
+
+    def test_delete_project_clears_soft_references(self):
+        project = self.client.post("/api/projects", json={"name": "待删除监管项"}).json()
+        project_id = project["id"]
+        sql_asset = self.client.post(
+            "/api/sql-assets", json={"name": "删除测试 SQL", "sql_text": "SELECT 1", "related_project_id": project_id}
+        ).json()
+        task = self.client.post(
+            "/api/tasks", json={"title": "删除测试任务", "related_entity_type": "project", "related_entity_id": project_id}
+        ).json()
+        self.assertEqual(self.client.delete(f"/api/projects/{project_id}").status_code, 204)
+        self.assertIsNone(self.client.get(f"/api/sql-assets/{sql_asset['id']}").json()["related_project_id"])
+        refreshed_task = self.client.get(f"/api/tasks/{task['id']}").json()
+        self.assertIsNone(refreshed_task["related_entity_id"])
+        self.assertIsNone(refreshed_task["related_entity_type"])
+
     def test_project_detail_and_progress_update(self):
         detail = self.client.get("/api/projects/P-001")
         self.assertEqual(detail.status_code, 200)

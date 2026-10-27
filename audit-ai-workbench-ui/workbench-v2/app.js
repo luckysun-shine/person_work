@@ -3243,12 +3243,55 @@ $('#modelSqlVersionForm')?.addEventListener('submit', async event => {
 function renderModelRuns(runs) {
   const list = $('#modelRunList'); list.replaceChildren();
   if (!runs.length) { list.append(make('p', 'empty-state', '暂无运行记录')); return; }
+  const statusText = { success: '成功', failed: '失败', running: '运行中', cancelled: '已取消' };
   runs.forEach(run => {
     const row = make('div');
-    const summary = make('span'); summary.append(make('strong', '', run.result_summary || '未填写运行摘要'), make('small', '', `扫描 ${run.scanned_count} · 命中 ${run.hit_count} · 已复核 ${run.reviewed_count}`));
-    row.append(make('b', run.status === 'failed' ? 'run-failed' : '', run.status === 'success' ? '成功' : run.status), summary, make('em', '', formatDate(run.started_at)));
+    const pending = Math.max((run.hit_count || 0) - (run.reviewed_count || 0), 0);
+    const summary = make('span');
+    summary.append(
+      make('strong', '', run.result_summary || '未填写运行摘要'),
+      make('small', '', `扫描 ${run.scanned_count} · 命中 ${run.hit_count} · 已复核 ${run.reviewed_count}${pending ? ` · 待复核 ${pending}` : ''}`),
+    );
+    const side = make('span', 'run-side');
+    side.append(make('em', '', formatDate(run.started_at)));
+    const actions = make('span', 'run-actions');
+    if (pending > 0) {
+      const review = make('button', 'text-button', '标记已复核');
+      review.type = 'button';
+      review.title = '将本次运行的已复核数更新为命中数';
+      review.addEventListener('click', () => updateModelRun(run, { reviewed_count: run.hit_count || 0 }));
+      actions.append(review);
+    }
+    const remove = make('button', 'text-button danger-text', '删除');
+    remove.type = 'button';
+    remove.addEventListener('click', async () => {
+      if (!window.confirm('确认删除这条运行记录吗？模型的最近运行统计会按剩余记录重算。')) return;
+      try {
+        await apiRequest(`/api/models/${run.model_id}/runs/${run.id}`, { method: 'DELETE' });
+        await reloadModelAfterRunChange(run.model_id);
+        showToast('运行记录已删除');
+      } catch (error) { showToast(error.message); }
+    });
+    actions.append(remove);
+    side.append(actions);
+    row.append(make('b', run.status === 'failed' ? 'run-failed' : '', statusText[run.status] || run.status), summary, side);
     list.append(row);
   });
+}
+
+async function updateModelRun(run, changes) {
+  try {
+    await apiRequest(`/api/models/${run.model_id}/runs/${run.id}`, { method: 'PATCH', body: JSON.stringify(changes) });
+    await reloadModelAfterRunChange(run.model_id);
+    showToast('运行记录已更新');
+  } catch (error) { showToast(error.message); }
+}
+
+async function reloadModelAfterRunChange(modelId) {
+  state.models = await apiRequest('/api/models');
+  const model = state.models.find(item => item.id === modelId);
+  if (model) await selectModel(model);
+  if (state.currentProject) await refreshProjects();
 }
 
 function localDateTimeValue(date = new Date()) {
@@ -3272,9 +3315,9 @@ $('#modelRunForm').addEventListener('submit', async event => {
   };
   try {
     await apiRequest(`/api/models/${modelId}/runs`, { method: 'POST', body: JSON.stringify(payload) });
-    state.models = await apiRequest('/api/models');
-    const model = state.models.find(item => item.id === modelId); closeModal($('#modelRunModal'));
-    await selectModel(model); showToast('模型运行记录已保存');
+    closeModal($('#modelRunModal'));
+    await reloadModelAfterRunChange(modelId);
+    showToast('模型运行记录已保存');
   } catch (error) { showToast(error.message); }
 });
 
@@ -3386,8 +3429,18 @@ function renderProjects() {
         meta,
         footer,
       );
-      card.addEventListener('click', () => openProjectRelations(project));
-      card.addEventListener('keydown', event => { if (event.key === 'Enter') openProjectRelations(project); });
+      const openFromCard = async () => {
+        if (card.classList.contains('is-loading')) return;
+        card.classList.add('is-loading');
+        card.setAttribute('aria-busy', 'true');
+        try { await openProjectRelations(project); }
+        finally {
+          card.classList.remove('is-loading');
+          card.removeAttribute('aria-busy');
+        }
+      };
+      card.addEventListener('click', openFromCard);
+      card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openFromCard(); } });
       grid.append(card);
     });
     section.append(title, grid);
@@ -3480,6 +3533,7 @@ async function openProjectRelations(project, preferredTab = null) {
   if (!wasOpen) {
     state.currentModel = null;
     state.ledgerModelLoadedFor = null;
+    state.relationTasks = null; // 重新打开详情时刷新可关联任务列表
   }
   try {
     const data = await apiRequest(`/api/projects/${project.id}`);
@@ -3868,10 +3922,26 @@ function fillRelationEntityPick(entityType) {
   if (!pick) return;
   pick.replaceChildren(make('option', '', '请选择…'));
   pick.querySelector('option').value = '';
+  if (entityType === 'task' && !state.relationTasks && !state.relationTasksLoading) {
+    // 关联任务需要全量任务，而不是仅今日焦点；首次打开时异步拉取后重绘。
+    state.relationTasksLoading = true;
+    apiRequest('/api/tasks')
+      .then(tasks => {
+        state.relationTasks = (Array.isArray(tasks) ? tasks : [])
+          .filter(task => task.status !== 'archived')
+          .sort((a, b) => (a.status === 'done') - (b.status === 'done') || String(b.planned_date || '').localeCompare(String(a.planned_date || '')));
+      })
+      .catch(() => { state.relationTasks = state.focusTasks || []; })
+      .finally(() => {
+        state.relationTasksLoading = false;
+        if ($('#relationEntityType')?.value === 'task') fillRelationEntityPick('task');
+      });
+  }
+  const taskSource = state.relationTasks || state.focusTasks || [];
   const sources = {
     sql_asset: (state.sqlAssets || []).map(item => [item.id, item.name || item.id]),
     model: (state.models || []).map(item => [item.id, item.name || item.id]),
-    task: (state.focusTasks || state.tasks || []).map(item => [item.id, item.title || item.id]),
+    task: taskSource.map(item => [item.id, `${item.title || item.id}${item.status === 'done' ? '（已完成）' : ''}`]),
     data_request: (state.requests || []).map(item => [item.id, item.title || item.id]),
     note: (state.notes || []).map(item => [item.id, item.title || item.id]),
   };

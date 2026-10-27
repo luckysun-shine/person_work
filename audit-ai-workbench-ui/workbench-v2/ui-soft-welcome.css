@@ -257,6 +257,33 @@ body.theme-soft-welcome .primary-button {
   box-shadow: 0 8px 20px rgba(28, 28, 28, .16);
 }
 body.theme-soft-welcome .primary-button:hover { filter: brightness(1.08); }
+/* 聚焦环改用主题金色，替代基础主题的蓝色描边 */
+body.theme-soft-welcome button:focus-visible,
+body.theme-soft-welcome input:focus-visible,
+body.theme-soft-welcome textarea:focus-visible,
+body.theme-soft-welcome select:focus-visible,
+body.theme-soft-welcome [tabindex]:focus-visible {
+  outline: 3px solid rgba(232, 184, 48, .45);
+  outline-offset: 2px;
+}
+body.theme-soft-welcome .primary-button:focus-visible,
+body.theme-soft-welcome .soft-ledger-card:focus-visible {
+  outline-color: rgba(232, 184, 48, .7);
+}
+body.theme-soft-welcome input:focus,
+body.theme-soft-welcome textarea:focus,
+body.theme-soft-welcome select:focus,
+body.theme-soft-welcome .modal-form-grid input:focus,
+body.theme-soft-welcome .modal-form-grid select:focus,
+body.theme-soft-welcome .modal-form-grid textarea:focus {
+  border-color: rgba(232, 184, 48, .65);
+  box-shadow: 0 0 0 3px rgba(245, 200, 75, .22);
+}
+body.theme-soft-welcome input:focus:not(:focus-visible),
+body.theme-soft-welcome textarea:focus:not(:focus-visible),
+body.theme-soft-welcome select:focus:not(:focus-visible) {
+  outline: none;
+}
 body.theme-soft-welcome .secondary-button,
 body.theme-soft-welcome .text-button {
   border-radius: 999px;
@@ -2526,6 +2553,25 @@ body.theme-soft-welcome .soft-ledger-model-toolbar h3 {
 body.theme-soft-welcome .soft-ledger-model-toolbar .form-hint {
   margin: 0;
 }
+body.theme-soft-welcome .run-list .run-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+body.theme-soft-welcome .run-list .run-side em {
+  font-size: 11px;
+  color: var(--hig-tertiary);
+}
+body.theme-soft-welcome .run-list .run-actions {
+  display: flex;
+  gap: 4px;
+}
+body.theme-soft-welcome .run-list .run-actions .text-button {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+}
 body.theme-soft-welcome .soft-ledger-model-toolbar > div:first-child {
   flex: 1 1 220px;
   min-width: 0;
@@ -2658,6 +2704,33 @@ body.theme-soft-welcome .soft-ledger-card {
 body.theme-soft-welcome .soft-ledger-card:hover {
   border-color: rgba(232, 184, 48, .45) !important;
   transform: translateY(-2px);
+}
+body.theme-soft-welcome .soft-ledger-card.is-loading {
+  position: relative;
+  cursor: progress;
+  pointer-events: none;
+  border-color: rgba(232, 184, 48, .6) !important;
+}
+body.theme-soft-welcome .soft-ledger-card.is-loading > * {
+  opacity: .55;
+}
+body.theme-soft-welcome .soft-ledger-card.is-loading::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(28, 28, 28, .12);
+  border-top-color: var(--sw-gold);
+  animation: soft-ledger-spin .7s linear infinite;
+}
+@keyframes soft-ledger-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.theme-soft-welcome .soft-ledger-card.is-loading::after { animation: none; }
 }
 body.theme-soft-welcome .soft-ledger-card header {
   display: flex;

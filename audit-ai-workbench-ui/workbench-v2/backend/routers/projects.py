@@ -346,7 +346,24 @@ def update_project(project_id: str, payload: ProjectUpdate) -> dict:
 
 @router.delete("/api/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: str) -> Response:
-    return C.delete_record("projects", project_id, "项目不存在")
+    now = utc_now()
+    with transaction() as connection:
+        result = connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        # 步骤/执行/关系由外键级联删除；这里清理其它表上指向该台账的软引用，避免悬空编号。
+        for table in ("sql_assets", "data_requests", "stored_procedures"):
+            connection.execute(
+                f"UPDATE {table} SET related_project_id = NULL, updated_at = ? WHERE related_project_id = ?",
+                (now, project_id),
+            )
+        for table in ("tasks", "work_notes"):
+            connection.execute(
+                f"""UPDATE {table} SET related_entity_type = NULL, related_entity_id = NULL, updated_at = ?
+                WHERE related_entity_type = 'project' AND related_entity_id = ?""",
+                (now, project_id),
+            )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/api/projects/{project_id}/relations")
