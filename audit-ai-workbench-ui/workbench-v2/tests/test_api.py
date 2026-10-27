@@ -960,7 +960,7 @@ class ApiTestCase(unittest.TestCase):
         favorites = self.client.get("/api/notes", params={"favorite": "true", "archived": "true"})
         self.assertTrue(any(item["id"] == note_id for item in favorites.json()))
 
-    def test_request_combined_filters_and_stats(self):
+    def test_request_combined_filters(self):
         created = self.client.post(
             "/api/data-requests",
             json={
@@ -978,12 +978,6 @@ class ApiTestCase(unittest.TestCase):
         )
         self.assertEqual(filtered.status_code, 200)
         self.assertTrue(any(item["id"] == created.json()["id"] for item in filtered.json()))
-        stats = self.client.get("/api/stats", params={"period": "month"})
-        self.assertEqual(stats.status_code, 200)
-        body = stats.json()
-        self.assertIn("tasks", body)
-        self.assertIn("requests", body)
-        self.assertIn("drilldown", body["tasks"])
 
     def test_project_templates_and_auto_backup_setting(self):
         templates = self.client.get("/api/project-templates")

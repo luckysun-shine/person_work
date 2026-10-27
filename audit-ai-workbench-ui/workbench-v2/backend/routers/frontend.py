@@ -1,75 +1,10 @@
 """API routes: frontend."""
-from datetime import date, datetime, timedelta
 from pathlib import Path
-import csv
-import difflib
-import io
-import json
-import re
-import sqlite3
-import time
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from .. import common as C
-from ..ai_client import (
-    AINotConfigured,
-    AIRequestError,
-    enhance_note_assist,
-    enhance_sql_assist,
-    enhance_weekly_report,
-)
-from ..calendar_sync import sync_subscription_events, window_for_settings
-from ..db import PROJECT_DIR, connect, init_db, new_id, row_to_dict, transaction, utc_now
-from ..report_exports import report_docx, report_markdown, report_pdf
-from ..schemas import (
-    AccessUnlock,
-    BatchIds,
-    BatchRequestStatus,
-    BatchSqlStatus,
-    BatchTaskCopy,
-    CalendarSubscriptionCreate,
-    CalendarSubscriptionUpdate,
-    CsvImportPayload,
-    DataImportPayload,
-    DataRequestCreate,
-    DataRequestUpdate,
-    GenericReportGenerate,
-    GenericReportUpsert,
-    ModelCreate,
-    ModelRunCreate,
-    ModelUpdate,
-    NavigationCreate,
-    NavigationUpdate,
-    NoteCreate,
-    NoteAssistRequest,
-    NoteUpdate,
-    ProjectCreate,
-    ProjectRelationCreate,
-    ProjectTemplateCreate,
-    ProjectTemplateUpdate,
-    ProjectUpdate,
-    ProcedureCreate,
-    ProcedureDeploymentCreate,
-    ProcedureUpdate,
-    ReportTemplateCreate,
-    ReportTemplateImport,
-    ReportTemplateUpdate,
-    SavedSearchCreate,
-    SavedSearchUpdate,
-    SettingsUpdate,
-    SqlAssetCreate,
-    SqlAssetUpdate,
-    SqlAssistRequest,
-    SqlVersionCreate,
-    TableRestorePayload,
-    TaskCreate,
-    TaskUpdate,
-    WeekReviewUpsert,
-    WeeklyReportUpsert,
-)
-from ..secrets_util import decrypt_secret, encrypt_secret, mask_secret
+from ..db import PROJECT_DIR
 
 router = APIRouter(tags=["frontend"])
 
@@ -115,5 +50,6 @@ def frontend() -> FileResponse:
 
 @router.get("/{path:path}", include_in_schema=False)
 def frontend_fallback(path: str) -> FileResponse:
-    if Path(path).suffix:
+    if path.startswith("api/") or Path(path).suffix:
         raise HTTPException(status_code=404, detail="资源不存在")
+    return FileResponse(PROJECT_DIR / "index.html")

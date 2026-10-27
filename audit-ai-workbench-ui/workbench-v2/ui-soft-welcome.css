@@ -228,19 +228,13 @@ body.theme-soft-welcome .global-search kbd {
   border-radius: 999px;
   background: #FAF6EC;
 }
-body.theme-soft-welcome .icon-button,
-body.theme-soft-welcome .avatar-button {
+body.theme-soft-welcome .icon-button {
   width: 42px;
   height: 42px;
   border-radius: 999px;
   border: 1px solid var(--hig-separator);
   background: var(--sw-card);
   box-shadow: var(--hig-card-shadow);
-}
-body.theme-soft-welcome .avatar-button {
-  color: var(--sw-gold);
-  background: var(--sw-ink);
-  border: 0;
 }
 body.theme-soft-welcome .ai-status-chip {
   border-radius: 999px;
@@ -1476,29 +1470,6 @@ body.theme-soft-welcome #view-week .week-review > footer {
   }
 }
 
-body.theme-soft-welcome.dark #view-week .day-column,
-body.theme-soft-welcome.dark .soft-week-toolbar,
-body.theme-soft-welcome.dark #view-week .week-toolbar {
-  background: #1A1814;
-  border-color: rgba(255, 255, 255, .08);
-}
-body.theme-soft-welcome.dark #view-week .day-column.today-column {
-  background: linear-gradient(180deg, rgba(247, 213, 106, .18), #1A1814 55%);
-}
-body.theme-soft-welcome.dark #view-week .plan-card,
-body.theme-soft-welcome.dark #view-week .task-card,
-body.theme-soft-welcome.dark #view-week .review-grid textarea,
-body.theme-soft-welcome.dark #view-week .week-review select,
-body.theme-soft-welcome.dark #view-week .week-review > footer {
-  background: #24211C;
-}
-body.theme-soft-welcome.dark #view-week .plan-card:hover {
-  background: #2E2A24;
-}
-body.theme-soft-welcome.dark #view-week .day-empty {
-  border-color: rgba(255, 255, 255, .12);
-  color: rgba(255, 255, 255, .32);
-}
 /* Modal: scroll on overlay, keep card radius intact (no edge scrollbar) */
 body.theme-soft-welcome .modal {
   display: flex;
@@ -1548,72 +1519,6 @@ body.theme-soft-welcome .toast {
   background: var(--sw-ink);
   color: #fff;
 }
-body.theme-soft-welcome.dark .soft-ring::before,
-body.theme-soft-welcome.dark .soft-acc,
-body.theme-soft-welcome.dark .soft-acc-item,
-body.theme-soft-welcome.dark .ai-capability-card,
-body.theme-soft-welcome.dark .soft-quick-links button {
-  background: #24211C;
-}
-body.theme-soft-welcome.dark .home-week-day {
-  background: #24211C;
-}
-body.theme-soft-welcome.dark .home-week-day:hover {
-  background: #2E2A24;
-}
-body.theme-soft-welcome.dark .home-week-day.is-today {
-  background: linear-gradient(180deg, rgba(247, 213, 106, .28), rgba(232, 184, 48, .16));
-}
-body.theme-soft-welcome.dark .home-week-empty {
-  color: rgba(255, 255, 255, .28);
-}
-body.theme-soft-welcome.dark .home-tile-focus,
-body.theme-soft-welcome.dark .home-tile-tasks,
-body.theme-soft-welcome.dark .today-card-tasks {
-  background: #0E0D0B;
-}
-body.theme-soft-welcome.dark .soft-acc-item,
-body.theme-soft-welcome.dark .home-link-grid button,
-body.theme-soft-welcome.dark .ai-capability-card,
-body.theme-soft-welcome.dark .today-calendar-list > div,
-body.theme-soft-welcome.dark .today-calendar-list > button {
-  background: #24211C;
-}
-
-/* Dark appearance keeps Soft Welcome charcoal/gold language */
-body.theme-soft-welcome.dark {
-  --hig-canvas: #141210;
-  --hig-label: #F5F0E6;
-  --hig-secondary: #B5AD9E;
-  --hig-tertiary: #8A8274;
-  --hig-separator: rgba(255, 255, 255, .08);
-  --hig-fill: rgba(255, 255, 255, .06);
-  --hig-surface: #1C1A16;
-  --hig-surface-solid: #1C1A16;
-  --sw-page: #141210;
-  --sw-card: #1C1A16;
-  --sw-ink: #F5F0E6;
-  background:
-    radial-gradient(900px 500px at 10% -10%, rgba(245, 200, 75, .12), transparent 55%),
-    #141210;
-}
-body.theme-soft-welcome.dark .nav {
-  background: rgba(28, 26, 22, .9);
-}
-body.theme-soft-welcome.dark .nav-item.active {
-  background: var(--sw-gold);
-  color: #1C1C1C;
-}
-body.theme-soft-welcome.dark .nav-item.active span { color: #1C1C1C; }
-body.theme-soft-welcome.dark .primary-button {
-  background: var(--sw-gold);
-  color: #1C1C1C;
-}
-body.theme-soft-welcome.dark .today-card-tasks,
-body.theme-soft-welcome.dark .ai-capability-panel {
-  background: #0E0D0B;
-}
-
 /* ——— SQL 资产 · Soft Welcome ——— */
 body.theme-soft-welcome #view-sql .soft-page-head {
   align-items: flex-end;
@@ -3116,9 +3021,7 @@ body.theme-soft-welcome .mobile-tabbar {
     margin: 0;
   }
   body.theme-soft-welcome .global-search kbd,
-  body.theme-soft-welcome .today-label,
-  body.theme-soft-welcome .appearance-button,
-  body.theme-soft-welcome .avatar-button {
+  body.theme-soft-welcome .today-label {
     display: none !important;
   }
   body.theme-soft-welcome .ai-status-chip {

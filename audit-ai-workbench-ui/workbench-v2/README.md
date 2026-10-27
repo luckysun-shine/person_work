@@ -1,19 +1,20 @@
-# 数智审监工作台 V2（v1.9.31）
+# 数智审监工作台 V2（v1.9.32）
 
 面向审计监察数据分析师的本地单用户工作台，围绕以下工作闭环组织：
 
 `工作请求 → 周计划 / 日程 → SQL 取数 → 模型维护 → 审监监测台账 → 记录复盘 → 周报输出`
 
-界面主题为 **Soft Welcome**（`ui-soft-welcome.css` + `theme-soft-welcome`）。同一应用可在电脑与手机浏览器打开；Docker 部署后可通过局域网 IP 在手机访问。
+界面主题为 **Soft Welcome**（`ui-soft-welcome.css` + `theme-soft-welcome`），固定浅色外观。同一应用可在电脑与手机浏览器打开；Docker 部署后可通过局域网 IP 在手机访问。
 
 ## 当前内容
 
 - 10 个工作区：今日、本周计划、数据请求、统一检索、SQL 资产、存储过程、审监监测台账（含监测模型）、工作记录、常用导航、数据管理。
+- 顶栏：全局搜索（`Ctrl/⌘ K`）、AI 状态芯片（点击进入 AI 配置）、快速新建。
 - 今日：焦点监管、本周日历、待办勾选完成、日程、数据请求/SQL/模型摘要、快捷入口；侧栏角标按真实未完成/待更新数量更新。
 - 本周计划：周一至周日；任务计划与订阅日程同列展示；卡片「完成 / 恢复」；工具栏「同步日历」；本周/下周/以后/已完成；拖动改期；周复盘。
-- 数据请求：独立日常取数存档；新增、编辑、删除、组合筛选与批量操作；记录主题、用途、需求人/部门、范围口径与 SQL；支持 **SQL 代码多版本**（另存、恢复、历史列表）。
+- 数据请求：独立日常取数存档；摘要指标为「全部请求 / 处理中 / 本月已交付 / 平均交付用时」；新增、编辑、删除、组合筛选与批量操作；记录主题、用途、需求人/部门、范围口径与 SQL；支持 **SQL 代码多版本**（另存、恢复、历史列表）。
 - SQL 资产：版本历史、diff、敏感检查、详情抽屉、批量验证/删除。
-- 审监监测台账：预置四大类监管项；总览指标 + 分类/待关注筛选；详情六 Tab（概览 / 规划逻辑 / **监测模型** / 代码备份 / 更新步骤 / 执行记录）；模型可新建绑定、记录运行、解除绑定。
+- 审监监测台账：预置四大类监管项；总览五指标（监管项 / 进行中 / 绑定模型 / 待关注 / 待办步骤）+ 分类/待关注筛选，列表、卡片与详情共用同一套「待关注」口径；详情六 Tab（概览 / 规划逻辑 / **监测模型** / 代码备份 / 更新步骤 / 执行记录），模型 Tab 数据按需加载；模型可新建绑定、从下拉选择已有模型绑定、记录运行、标记运行已复核、删除运行记录、解除绑定；详情有未保存修改时关闭会二次确认。
 - 工作记录：Markdown、收藏/归档、修订历史。
 - 常用导航：分组、搜索、首页展示开关、访问统计。
 - 存储过程：定义/回滚、版本、环境发布记录。
@@ -63,12 +64,33 @@ docker compose up -d --build
 - `ui-soft-welcome.css`：Soft Welcome 主题层
 - `ui-apple-hig.css` / `styles.css`：基础组件与兼容层
 - `backend/main.py`：FastAPI 入口
-- `backend/routers/`：域路由（tasks / projects / calendar / requests 等）
+- `backend/routers/`：域路由（access / tasks / reports / notes / sql / procedures / requests / models / projects / search / settings / calendar / data / frontend）
+- `backend/common.py`：共享工具（鉴权、查询、通知）与 `APP_VERSION`
 - `backend/db.py`：表结构、迁移、台账种子
 - `backend/calendar_sync.py`：ICS / CalDAV
 - `tests/`：API 与冒烟测试
 
+## 主要 API（节选）
+
+| 资源 | 端点 |
+|---|---|
+| 台账 | `GET/POST /api/projects`、`GET/PATCH/DELETE /api/projects/{id}`、`/api/projects/{id}/relations`、`/api/projects/{id}/steps`、`/api/projects/{id}/executions` |
+| 监测模型 | `GET/POST /api/models`、`GET/PATCH/DELETE /api/models/{id}`、`GET/POST /api/models/{id}/runs`、`PATCH/DELETE /api/models/{id}/runs/{run_id}`、`/api/models/{id}/sql-versions` |
+| 数据请求 | `GET/POST /api/data-requests`、`PATCH/DELETE /api/data-requests/{id}`、`/api/data-requests/{id}/sql-versions`、批量 `batch-status` / `batch-delete` |
+| 任务 / 周报 | `/api/tasks`、`GET/PUT /api/weekly-reports/{week_start}`（`generate` / `polish` / `finalize` / `markdown` / `docx` / `pdf`） |
+| 设置 / 访问 | `GET/PUT /api/settings`、`/api/access/status` / `unlock` / `lock` |
+
+完整列表见运行后的 `/docs`。
+
 ## 版本记录
+
+### v1.9.32
+
+- 下线「统计复盘」页面及 `/api/stats`；移除浅色/深色外观切换与头像按钮，界面固定浅色。
+- 数据请求摘要去掉「等待确认」指标。
+- 台账：统一「待关注」口径；总览改为五指标；模型 Tab 按需加载；支持绑定已有模型、标记运行已复核、删除运行记录；删除监管项时同步清理 SQL / 请求 / 过程 / 任务 / 记录中的软引用；详情未保存修改关闭确认。
+- 后端：批量查询台账摘要与最近执行；运行记录新增 PATCH / DELETE；清理路由拆分遗留的近千行无用导入；`APP_VERSION` 与 README 对齐。
+- 前端：移除深色模式与外观按钮相关 CSS。
 
 ### v1.9.31
 
@@ -108,7 +130,7 @@ docker compose up -d --build
 
 ### v1.7.0（P1）
 
-- 任务重复/耗时；请求组合筛选；记录收藏归档；统计下钻；项目模板；定时备份。
+- 任务重复/耗时；请求组合筛选；记录收藏归档；统计下钻（已于 v1.9.32 下线）；项目模板；定时备份。
 
 ### 更早版本
 

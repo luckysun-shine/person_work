@@ -24,7 +24,7 @@ NOTE_TAGS = (
     "模型", "数据请求", "口径", "风险", "数据质量", "规则变更", "项目复盘",
 )
 
-APP_VERSION = "1.9.0"
+APP_VERSION = "1.9.32"
 
 ACCESS_COOKIE = "workbench_access"
 PUBLIC_API_PREFIXES = (
