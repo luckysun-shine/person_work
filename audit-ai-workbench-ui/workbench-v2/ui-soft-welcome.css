@@ -842,14 +842,89 @@ body.theme-soft-welcome .drawer header {
 body.theme-soft-welcome .form-grid input,
 body.theme-soft-welcome .form-grid select,
 body.theme-soft-welcome .form-grid textarea,
-body.theme-soft-welcome .soft-area {
+body.theme-soft-welcome .soft-area,
+body.theme-soft-welcome .modal-form-grid input,
+body.theme-soft-welcome .modal-form-grid select,
+body.theme-soft-welcome .modal-form-grid textarea {
   border-radius: 14px;
   border: 1px solid var(--hig-separator);
-  background: #FAF6EC;
+  background: #FFFDF6;
+  color: var(--sw-ink);
+  color-scheme: light;
 }
-body.theme-soft-welcome .assoc-picker {
+body.theme-soft-welcome .form-grid input::placeholder,
+body.theme-soft-welcome .form-grid textarea::placeholder,
+body.theme-soft-welcome .modal-form-grid input::placeholder,
+body.theme-soft-welcome .modal-form-grid textarea::placeholder,
+body.theme-soft-welcome .soft-area::placeholder,
+body.theme-soft-welcome .inline-search input::placeholder,
+body.theme-soft-welcome .search-hero input::placeholder,
+body.theme-soft-welcome .command-input input::placeholder {
+  color: #8A8478;
+  opacity: 1;
+}
+body.theme-soft-welcome select option {
+  color: var(--sw-ink);
+  background: #FFFDF6;
+}
+body.theme-soft-welcome .assoc-picker,
+body.theme-soft-welcome .assoc-add {
   border-radius: 16px;
-  background: #FAF6EC;
+  background: #FFFDF6;
+  color: var(--sw-ink);
+}
+
+/* Search + version controls: keep light field, dark text (never black shells) */
+body.theme-soft-welcome .inline-search,
+body.theme-soft-welcome .soft-list-toolbar .inline-search,
+body.theme-soft-welcome .global-search,
+body.theme-soft-welcome .command-input,
+body.theme-soft-welcome .soft-search-hero {
+  background: #FFFDF6 !important;
+  color: var(--sw-ink);
+  border-color: var(--hig-separator);
+}
+body.theme-soft-welcome .inline-search input,
+body.theme-soft-welcome .search-hero input,
+body.theme-soft-welcome .soft-search-hero input,
+body.theme-soft-welcome .command-input input,
+body.theme-soft-welcome .global-search {
+  color: var(--sw-ink) !important;
+  background: transparent !important;
+  -webkit-text-fill-color: var(--sw-ink);
+}
+body.theme-soft-welcome .sql-toolbar select,
+body.theme-soft-welcome #sqlVersion,
+body.theme-soft-welcome select#requestStatus,
+body.theme-soft-welcome select#sqlStatus,
+body.theme-soft-welcome select#versionStatus,
+body.theme-soft-welcome select#procedureStatus,
+body.theme-soft-welcome select#modelStatus,
+body.theme-soft-welcome select#taskStatus,
+body.theme-soft-welcome .form-grid select,
+body.theme-soft-welcome .modal-form-grid select {
+  background: #FFFDF6 !important;
+  color: var(--sw-ink) !important;
+  border: 1px solid var(--hig-separator);
+  border-radius: 12px;
+  color-scheme: light;
+}
+
+/* Soft Welcome code fields: light editor, not dark terminal */
+body.theme-soft-welcome .code-input,
+body.theme-soft-welcome textarea.code-input,
+body.theme-soft-welcome .modal-form-grid .code-input,
+body.theme-soft-welcome .form-grid .code-input {
+  color: var(--sw-ink) !important;
+  background: #FFFDF6 !important;
+  border: 1px solid var(--hig-separator) !important;
+  -webkit-text-fill-color: var(--sw-ink);
+}
+body.theme-soft-welcome .code-input:focus,
+body.theme-soft-welcome textarea.code-input:focus {
+  border-color: rgba(232, 184, 48, .65) !important;
+  box-shadow: 0 0 0 3px rgba(245, 200, 75, .22);
+  background: #FFFEFB !important;
 }
 
 /* Collapse / mobile */
@@ -1309,9 +1384,11 @@ body.theme-soft-welcome #view-week .week-review select {
   min-height: 36px;
   border-radius: 999px;
   border: 1px solid var(--hig-separator);
-  background: #FAF6EC;
+  background: #FFFDF6;
+  color: var(--sw-ink);
   padding: 0 12px;
   font: inherit;
+  color-scheme: light;
 }
 body.theme-soft-welcome #view-week .review-grid {
   display: grid;
@@ -1558,7 +1635,13 @@ body.theme-soft-welcome .soft-list-toolbar .inline-search {
   flex: 1;
   min-height: 40px;
   border-radius: 14px;
-  background: #FAF6EC;
+  background: #FFFDF6;
+  color: var(--sw-ink);
+  border: 1px solid var(--hig-separator);
+}
+body.theme-soft-welcome .soft-list-toolbar .inline-search input {
+  color: var(--sw-ink);
+  -webkit-text-fill-color: var(--sw-ink);
 }
 body.theme-soft-welcome .sql-asset-board {
   gap: 14px;
@@ -2126,6 +2209,14 @@ body.theme-soft-welcome .soft-advanced-filters label {
   font-size: 12px;
   font-weight: 650;
   color: var(--hig-secondary);
+}
+body.theme-soft-welcome .soft-advanced-filters input,
+body.theme-soft-welcome .soft-advanced-filters select {
+  background: #FFFDF6;
+  color: var(--sw-ink);
+  border: 1px solid var(--hig-separator);
+  border-radius: 12px;
+  color-scheme: light;
 }
 body.theme-soft-welcome .request-sql-record {
   display: flex;
