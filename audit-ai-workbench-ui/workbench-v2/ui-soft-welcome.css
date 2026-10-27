@@ -2430,10 +2430,81 @@ body.theme-soft-welcome .model-tab {
 }
 
 /* ——— 审监监测台账 ——— */
+body.theme-soft-welcome .soft-ledger-overview {
+  margin-bottom: 14px;
+}
+body.theme-soft-welcome .soft-ledger-card.needs-attention {
+  border-color: rgba(180, 35, 24, .28);
+  box-shadow: 0 10px 28px rgba(180, 35, 24, .08);
+}
+body.theme-soft-welcome .soft-ledger-model-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #FFF1C2;
+  color: #7A4E00;
+}
+body.theme-soft-welcome .soft-ledger-model-chip strong {
+  font-size: 12px;
+}
+body.theme-soft-welcome .soft-ledger-model-chip span {
+  margin-left: auto;
+  color: var(--hig-tertiary);
+  font-size: 11px;
+}
+body.theme-soft-welcome .soft-ledger-model-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+body.theme-soft-welcome .soft-ledger-model-toolbar h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+body.theme-soft-welcome .soft-ledger-model-toolbar .form-hint {
+  margin: 0;
+}
+body.theme-soft-welcome .soft-ledger-model-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+body.theme-soft-welcome .soft-ledger-model-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--hig-separator);
+  background: #FFFDF6;
+  text-align: left;
+  cursor: pointer;
+}
+body.theme-soft-welcome .soft-ledger-model-card.active,
+body.theme-soft-welcome .soft-ledger-model-card:hover {
+  border-color: rgba(232, 184, 48, .55);
+  box-shadow: 0 8px 20px rgba(60, 48, 20, .08);
+}
+body.theme-soft-welcome .soft-ledger-model-card small {
+  color: var(--hig-tertiary);
+}
+body.theme-soft-welcome .soft-ledger-model-detail {
+  margin-top: 8px;
+  border-radius: 20px;
+  border: 1px solid var(--hig-separator);
+  background: var(--sw-card);
+  overflow: hidden;
+}
 body.theme-soft-welcome .soft-ledger-toolbar {
   margin-bottom: 18px;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 body.theme-soft-welcome .soft-ledger-board {
   display: flex;

@@ -13,7 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='10' fill='%231C1C1C'/%3E%3Cpath d='M18 6.5 27.5 10.2v7.2c0 6.1-4 10.6-9.5 12.4-5.5-1.8-9.5-6.3-9.5-12.4v-7.2L18 6.5Z' fill='none' stroke='%23F5C84B' stroke-width='1.9' stroke-linejoin='round'/%3E%3Cpath d='M13.5 20.5v-4m4.5 4v-7m4.5 7v-2.5' stroke='%23FFF1C2' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='22.5' cy='13.5' r='1.7' fill='%23F5C84B'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css?v=1.0.0">
   <link rel="stylesheet" href="ui-apple-hig.css?v=1.9.17">
-  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.19">
+  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.20">
 </head>
 <body class="theme-soft-welcome">
   <div class="app-shell">
@@ -41,8 +41,7 @@
         <button class="nav-item" data-view="requests"><svg><use href="#i-inbox"/></svg><span>数据请求</span><b id="navRequestCount" hidden>0</b></button>
         <button class="nav-item" data-view="sql"><svg><use href="#i-code"/></svg><span>SQL 资产</span></button>
         <button class="nav-item" data-view="procedures"><svg><use href="#i-database"/></svg><span>存储过程</span></button>
-        <button class="nav-item" data-view="models"><svg><use href="#i-model"/></svg><span>监测模型</span><b id="navModelCount" class="risk" hidden>0</b></button>
-        <button class="nav-item" data-view="projects"><svg><use href="#i-project"/></svg><span>审监监测台账</span></button>
+        <button class="nav-item" data-view="projects"><svg><use href="#i-project"/></svg><span>审监监测台账</span><b id="navProjectCount" class="risk" hidden>0</b></button>
 
         <p class="nav-label">知识</p>
         <button class="nav-item" data-view="notes"><svg><use href="#i-note"/></svg><span>工作记录</span></button>
@@ -166,7 +165,7 @@
               <div class="home-tile-body">
                 <div class="home-link-grid" id="todayQuickLinks">
                   <button type="button" data-view-jump="sql"><strong>SQL 库</strong><small>查询资产</small></button>
-                  <button type="button" data-view-jump="models"><strong>监测模型</strong><small>规则运行</small></button>
+                  <button type="button" data-view-jump="projects"><strong>监测台账</strong><small>监管与模型</small></button>
                   <button type="button" data-view-jump="notes"><strong>工作记录</strong><small>口径与复盘</small></button>
                   <button type="button" data-view-jump="week"><strong>本周计划</strong><small>排期与复盘</small></button>
                   <button type="button" data-view-jump="procedures"><strong>存储过程</strong><small>过程资产</small></button>
@@ -224,17 +223,17 @@
 
             <section class="panel home-tile home-tile-models">
               <div class="panel-head">
-                <div><h2>监测模型</h2><p>运行状态与待更新</p></div>
-                <button class="text-button" type="button" data-view-jump="models">模型 →</button>
+                <div><h2>台账模型</h2><p>监管项绑定的运行模型</p></div>
+                <button class="text-button" type="button" data-view-jump="projects">台账 →</button>
               </div>
               <div class="home-tile-body soft-acc-list" id="todayModelRows">
-                <p class="empty-state home-placeholder">暂无监测模型，创建后在此显示状态。</p>
+                <p class="empty-state home-placeholder">暂无绑定模型的监管项。</p>
               </div>
             </section>
           </div>
 
           <footer class="today-layout-bar">
-            <span class="today-layout-hint" id="homeEditHint">首页：焦点/本周日历 → 入口/待办/日程 → 请求/SQL/模型</span>
+            <span class="today-layout-hint" id="homeEditHint">首页：焦点/本周日历 → 入口/待办/日程 → 请求/SQL/台账模型</span>
             <button class="text-button" type="button" id="toggleHomeEdit" hidden>调整布局</button>
             <button class="text-button" type="button" id="resetHomeLayout" hidden>恢复默认</button>
           </footer>
@@ -349,19 +348,14 @@
           <div class="data-list procedure-list soft-data-list"><div class="data-list-head"><span>过程名称</span><span>数据库 / Schema</span><span>版本</span><span>负责人</span><span>关联项目</span><span>状态</span></div><div id="procedureRows"></div></div>
         </section>
 
-        <section class="view" id="view-models" data-title="监测模型">
-          <div class="page-head soft-page-head"><div><p class="eyebrow">MONITORING MODELS</p><h1>监测模型</h1><p>统一查看运行状态、规则版本、异常结果与维护步骤。</p></div><button class="primary-button" id="newModelButton"><svg><use href="#i-plus"/></svg>新建模型</button></div>
-          <div class="model-overview soft-summary soft-model-overview"><div><span class="signal ok-signal"></span><p><strong id="modelHealthSummary">0 / 0 模型运行正常</strong><small id="modelLastRun">尚无运行记录</small></p></div><div><strong id="modelHitSummary">0</strong><span>本次命中</span></div><div><strong id="modelPendingSummary">0</strong><span>待复核</span></div><div><strong id="modelUpdateSummary">0</strong><span>规则待更新</span></div></div>
-          <div class="model-grid soft-model-grid" id="modelCards"></div>
-          <section class="panel model-detail soft-model-detail">
-            <div class="model-detail-head"><div><p class="eyebrow" id="modelDetailCode">选择一个模型</p><h2 id="modelDetailName">监测模型详情</h2><p id="modelDetailPurpose">查看规则、依赖、版本与维护步骤。</p></div><div class="batch-actions"><button class="secondary-button" id="editModelButton">编辑模型</button><button class="secondary-button danger-button" id="deleteModelButton">删除</button><button class="secondary-button" id="newModelRunButton">记录一次运行</button></div></div>
-            <div class="model-tabs soft-model-tabs"><button class="active" data-model-tab="rules">核心规则</button><button data-model-tab="deps">依赖对象</button><button data-model-tab="runs">运行记录</button><button data-model-tab="steps">更新步骤</button><button data-model-tab="history">版本记录</button></div>
-            <div class="model-tab active" id="model-tab-rules"><div class="rule-list" id="modelRuleList"></div></div>
-            <div class="model-tab" id="model-tab-deps"><div class="dependency-map" id="modelDependencies"></div></div>
-            <div class="model-tab" id="model-tab-runs"><div class="run-list" id="modelRunList"></div></div>
-            <div class="model-tab" id="model-tab-steps"><div class="step-list" id="modelStepList"></div></div>
-            <div class="model-tab" id="model-tab-history"><div class="history-list soft-history" id="modelVersionList"></div></div>
-          </section>
+        <section class="view" id="view-models" data-title="监测模型" hidden aria-hidden="true">
+          <!-- 保留节点供台账详情复用模型渲染，不再作为独立工作区 -->
+          <div id="modelCards" hidden></div>
+          <strong id="modelHealthSummary" hidden></strong>
+          <strong id="modelHitSummary" hidden></strong>
+          <strong id="modelPendingSummary" hidden></strong>
+          <strong id="modelUpdateSummary" hidden></strong>
+          <small id="modelLastRun" hidden></small>
         </section>
 
         <section class="view" id="view-projects" data-title="审监监测台账">
@@ -369,9 +363,16 @@
             <div>
               <p class="eyebrow">MONITOR LEDGER</p>
               <h1>审监监测台账</h1>
-              <p>分类浏览监管项目，维护周期、规划逻辑、代码备份、更新步骤与执行记录。</p>
+              <p>统一管理监管项：周期执行、监管逻辑、代码备份、监测模型、更新步骤与执行记录。</p>
             </div>
             <button class="primary-button" id="newProjectButton" type="button"><svg><use href="#i-plus"/></svg>新增监管项</button>
+          </div>
+          <div class="summary-line soft-summary soft-ledger-overview" id="ledgerOverview">
+            <div><strong id="ledgerTotalCount">0</strong><span>监管项</span></div>
+            <div><strong id="ledgerActiveCount">0</strong><span>进行中</span></div>
+            <div><strong id="ledgerModelCount">0</strong><span>绑定模型</span></div>
+            <div><strong id="ledgerAttentionCount">0</strong><span>待关注</span></div>
+            <p>待办步骤 <strong id="ledgerPendingSteps">0</strong></p>
           </div>
           <div class="list-toolbar soft-list-toolbar soft-ledger-toolbar">
             <div class="filter-tabs" id="ledgerCategoryFilters">
@@ -381,7 +382,12 @@
               <button type="button" data-ledger-category="合作商监管类">合作商监管类</button>
               <button type="button" data-ledger-category="AI助力管理类">AI助力管理类</button>
             </div>
-            <div class="inline-search wide"><svg><use href="#i-search"/></svg><input id="ledgerSearch" placeholder="搜索监管项、规划或逻辑关键词"></div>
+            <div class="filter-tabs soft-segmented" id="ledgerFocusFilters">
+              <button class="active" type="button" data-ledger-focus="all">全部状态</button>
+              <button type="button" data-ledger-focus="attention">待关注</button>
+              <button type="button" data-ledger-focus="with_model">已绑模型</button>
+            </div>
+            <div class="inline-search wide"><svg><use href="#i-search"/></svg><input id="ledgerSearch" placeholder="搜索监管项、规划、逻辑或模型"></div>
             <span class="soft-result-hint" id="ledgerResultHint">0 项</span>
           </div>
           <div class="soft-ledger-board" id="projectBoard"></div>
@@ -795,8 +801,9 @@
       <input type="hidden" id="relationProjectId">
       <div class="project-detail-summary soft-ledger-summary" id="projectDetailSummary"></div>
       <div class="filter-tabs soft-ledger-tabs" id="ledgerDetailTabs" role="tablist">
-        <button class="active" type="button" data-ledger-tab="overview" role="tab" aria-selected="true">概览与周期</button>
-        <button type="button" data-ledger-tab="logic" role="tab" aria-selected="false">规划 / 监管逻辑</button>
+        <button class="active" type="button" data-ledger-tab="overview" role="tab" aria-selected="true">概览</button>
+        <button type="button" data-ledger-tab="logic" role="tab" aria-selected="false">规划逻辑</button>
+        <button type="button" data-ledger-tab="models" role="tab" aria-selected="false">监测模型</button>
         <button type="button" data-ledger-tab="code" role="tab" aria-selected="false">代码备份</button>
         <button type="button" data-ledger-tab="steps" role="tab" aria-selected="false">更新步骤</button>
         <button type="button" data-ledger-tab="exec" role="tab" aria-selected="false">执行记录</button>
@@ -859,7 +866,10 @@
                   <option value="note">工作记录</option>
                 </select>
               </label>
-              <label>对象编号<input id="relationEntityId" required placeholder="例如 Q-128 或 M-014"></label>
+              <label id="relationEntityPickLabel">选择对象
+                <select id="relationEntityPick"><option value="">请选择…</option></select>
+              </label>
+              <label id="relationEntityIdLabel" hidden>对象编号<input id="relationEntityId" placeholder="或手动输入编号"></label>
               <label>关系类型
                 <select id="relationType">
                   <option value="supporting">支撑资产</option>
@@ -873,6 +883,47 @@
             </form>
           </section>
         </div>
+      </section>
+
+      <section class="ledger-tab-panel" data-ledger-panel="models" hidden>
+        <div class="soft-ledger-model-toolbar">
+          <div>
+            <h3>绑定监测模型</h3>
+            <p class="form-hint">模型作为本监管项的运行规则子资源：规则、命中运行与版本都在这里维护。</p>
+          </div>
+          <div class="batch-actions">
+            <button type="button" class="secondary-button" id="bindExistingModelButton">绑定已有模型</button>
+            <button type="button" class="primary-button" id="newModelButton"><svg><use href="#i-plus"/></svg>新建并绑定</button>
+          </div>
+        </div>
+        <div class="soft-ledger-model-list" id="ledgerModelList"></div>
+        <section class="panel model-detail soft-model-detail soft-ledger-model-detail" id="ledgerModelDetail" hidden>
+          <div class="model-detail-head">
+            <div>
+              <p class="eyebrow" id="modelDetailCode">选择一个模型</p>
+              <h2 id="modelDetailName">监测模型详情</h2>
+              <p id="modelDetailPurpose">查看规则、依赖、版本与维护步骤。</p>
+            </div>
+            <div class="batch-actions">
+              <button class="secondary-button" id="editModelButton" type="button">编辑模型</button>
+              <button class="secondary-button" id="newModelRunButton" type="button">记录运行</button>
+              <button class="secondary-button danger-button" id="unbindLedgerModelButton" type="button">解除绑定</button>
+              <button class="secondary-button danger-button" id="deleteModelButton" type="button">删除模型</button>
+            </div>
+          </div>
+          <div class="model-tabs soft-model-tabs">
+            <button class="active" type="button" data-model-tab="rules">核心规则</button>
+            <button type="button" data-model-tab="deps">依赖对象</button>
+            <button type="button" data-model-tab="runs">运行记录</button>
+            <button type="button" data-model-tab="steps">模型步骤</button>
+            <button type="button" data-model-tab="history">版本记录</button>
+          </div>
+          <div class="model-tab active" id="model-tab-rules"><div class="rule-list" id="modelRuleList"></div></div>
+          <div class="model-tab" id="model-tab-deps"><div class="dependency-map" id="modelDependencies"></div></div>
+          <div class="model-tab" id="model-tab-runs"><div class="run-list" id="modelRunList"></div></div>
+          <div class="model-tab" id="model-tab-steps"><div class="step-list" id="modelStepList"></div></div>
+          <div class="model-tab" id="model-tab-history"><div class="history-list soft-history" id="modelVersionList"></div></div>
+        </section>
       </section>
 
       <section class="ledger-tab-panel" data-ledger-panel="logic" hidden>
@@ -961,7 +1012,7 @@
     <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 16H3V4h12v1"/></symbol>
   </svg>
   <datalist id="entityRelationOptions"></datalist>
-  <script src="app.js?v=1.9.30"></script>
+  <script src="app.js?v=1.9.31"></script>
 </body>
 </html>
 

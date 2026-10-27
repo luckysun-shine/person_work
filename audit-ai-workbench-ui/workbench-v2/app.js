@@ -19,9 +19,11 @@ const state = {
   currentModel: null,
   projects: [],
   ledgerCategory: 'all',
+  ledgerFocus: 'all',
   ledgerQuery: '',
   ledgerDetailTab: 'overview',
   ledgerDetail: null,
+  ledgerModelRelationId: null,
   navigation: [],
   currentProject: null,
   currentDetail: null,
@@ -290,12 +292,12 @@ function updateNavCounts() {
     requestBadge.textContent = String(openRequests);
     requestBadge.hidden = openRequests <= 0;
   }
-  const modelBadge = $('#navModelCount');
-  if (modelBadge) {
-    const dueModels = (state.models || []).filter(item => item.status === 'update_due' || (item.pending_review_count || 0) > 0).length;
-    modelBadge.textContent = String(dueModels);
-    modelBadge.hidden = dueModels <= 0;
-    modelBadge.classList.toggle('risk', dueModels > 0);
+  const projectBadge = $('#navProjectCount');
+  if (projectBadge) {
+    const attention = (state.projects || []).reduce((sum, item) => sum + (item.model_attention || 0) + (item.pending_steps || 0), 0);
+    projectBadge.textContent = String(attention);
+    projectBadge.hidden = attention <= 0;
+    projectBadge.classList.toggle('risk', attention > 0);
   }
   const hint = $('#sidebarHealthHint');
   if (hint && state.apiAvailable) {
@@ -305,6 +307,15 @@ function updateNavCounts() {
 }
 
 function showView(name) {
+  let redirectedFromModels = false;
+  if (name === 'models') {
+    name = 'projects';
+    redirectedFromModels = true;
+    state.ledgerFocus = 'with_model';
+    $$('#ledgerFocusFilters [data-ledger-focus]').forEach(item => {
+      item.classList.toggle('active', item.dataset.ledgerFocus === 'with_model');
+    });
+  }
   const target = $(`#view-${name}`);
   if (!target) return;
   if (typeof drawer !== 'undefined' && drawer.classList.contains('open')) closeDrawer();
@@ -326,6 +337,7 @@ function showView(name) {
   if (name === 'data' && state.apiAvailable) { refreshBackups(); loadSettings(); maybeAutoBackup(); }
   if (name === 'stats' && state.apiAvailable) refreshStats();
   if (name === 'search') { refreshSearchHelpers(); setTimeout(() => $('#globalSearchInput').focus(), 20); }
+  if (redirectedFromModels || name === 'projects') renderProjects();
 }
 
 $$('[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
@@ -534,8 +546,11 @@ function filteredLedgerProjects() {
   const q = (state.ledgerQuery || '').trim().toLowerCase();
   return (state.projects || []).filter(project => {
     if (state.ledgerCategory !== 'all' && project.category !== state.ledgerCategory) return false;
+    if (state.ledgerFocus === 'attention' && !(project.model_attention || project.pending_steps)) return false;
+    if (state.ledgerFocus === 'with_model' && !(project.model_count > 0)) return false;
     if (!q) return true;
-    const hay = [project.name, project.goal, project.plan_detail, project.monitor_logic, project.next_action]
+    const modelText = (project.linked_models || []).map(item => `${item.name || ''} ${item.id || ''}`).join(' ');
+    const hay = [project.name, project.goal, project.plan_detail, project.monitor_logic, project.next_action, modelText]
       .filter(Boolean).join(' ').toLowerCase();
     return hay.includes(q);
   });
@@ -636,23 +651,27 @@ function renderTodayModelsHome() {
   if (!rows) return;
   rows.replaceChildren();
   const statusNames = { normal: '运行正常', update_due: '待更新', paused: '已暂停', archived: '已归档' };
-  const items = (state.models || []).slice(0, 4);
-  items.forEach(item => {
+  const items = (state.projects || [])
+    .filter(project => (project.linked_models || []).length)
+    .flatMap(project => (project.linked_models || []).map(model => ({ project, model })))
+    .slice(0, 4);
+  items.forEach(({ project, model }) => {
     const button = make('button', 'soft-acc-item');
     button.type = 'button';
     button.append(
-      make('strong', '', item.name || item.id),
-      make('small', '', `${item.current_version || 'v1'} · ${statusNames[item.status] || item.status || '未知'}`),
+      make('strong', '', model.name || model.id),
+      make('small', '', `${project.name} · ${statusNames[model.status] || model.status || '未知'}`),
     );
     button.addEventListener('click', async () => {
-      showView('models');
-      const model = state.models.find(row => row.id === item.id);
-      if (model && typeof selectModel === 'function') await selectModel(model);
+      showView('projects');
+      await openProjectRelations(project);
+      setLedgerDetailTab('models');
+      await selectModel(model);
     });
     rows.append(button);
   });
   if (!items.length) {
-    rows.append(make('p', 'empty-state home-placeholder', '暂无监测模型，创建后在此显示状态。'));
+    rows.append(make('p', 'empty-state home-placeholder', '暂无绑定模型的监管项，可在台账详情中新建。'));
   }
 }
 
@@ -2861,61 +2880,56 @@ $$('[data-model-tab]').forEach(button => button.addEventListener('click', () => 
   $$('.model-tab').forEach(tab => tab.classList.toggle('active', tab.id === `model-tab-${button.dataset.modelTab}`));
 }));
 function renderModelCards() {
-  const grid = $('#modelCards');
-  if (!grid) return;
-  grid.replaceChildren();
-  if (!state.models.length) {
-    grid.append(make('p', 'empty-state', '还没有监测模型。创建后可在此查看运行状态与维护步骤。'));
-    return;
-  }
-  state.models.forEach(model => {
-    const card = make('button', 'model-card'); card.type = 'button'; card.dataset.modelId = model.id;
-    card.classList.toggle('active', state.currentModel?.id === model.id);
-    const header = make('header');
-    const identity = make('span'); identity.append(make('strong', '', model.name), make('small', '', `${model.id} · ${model.schedule || '未设置调度'}`));
-    const status = model.status === 'normal' ? ['运行正常', 'done'] : model.status === 'paused' ? ['已暂停', 'waiting'] : ['待更新', 'waiting'];
-    header.append(make('span', 'model-icon', 'M'), identity, make('em', `status ${status[1]}`, status[0]));
-    const metrics = make('div', 'model-metrics');
-    [['本次命中', model.hit_count], ['待复核', model.pending_review_count], ['当前版本', model.current_version]].forEach(([label, value]) => {
-      const metric = make('span'); metric.append(make('b', '', value), document.createTextNode(label)); metrics.append(metric);
-    });
-    const footer = make('footer'); footer.append(make('span', '', `最近运行 ${formatDate(model.last_run_at)}`), make('span', '', model.purpose || '暂无用途说明'));
-    card.append(header, metrics, footer);
-    card.addEventListener('click', () => selectModel(model)); grid.append(card);
-  });
+  // 独立模型页已并入台账；保留函数供 refreshModels 调用。
   const normal = state.models.filter(model => model.status === 'normal').length;
-  $('#modelHealthSummary').textContent = `${normal} / ${state.models.length} 模型运行正常`;
-  $('#modelHitSummary').textContent = state.models.reduce((sum, model) => sum + (model.hit_count || 0), 0);
-  $('#modelPendingSummary').textContent = state.models.reduce((sum, model) => sum + (model.pending_review_count || 0), 0);
-  $('#modelUpdateSummary').textContent = state.models.filter(model => model.status === 'update_due').length;
+  if ($('#modelHealthSummary')) $('#modelHealthSummary').textContent = `${normal} / ${state.models.length} 模型运行正常`;
+  if ($('#modelHitSummary')) $('#modelHitSummary').textContent = state.models.reduce((sum, model) => sum + (model.hit_count || 0), 0);
+  if ($('#modelPendingSummary')) $('#modelPendingSummary').textContent = state.models.reduce((sum, model) => sum + (model.pending_review_count || 0), 0);
+  if ($('#modelUpdateSummary')) $('#modelUpdateSummary').textContent = state.models.filter(model => model.status === 'update_due').length;
   const lastRun = state.models.map(model => model.last_run_at).filter(Boolean).sort().at(-1);
-  $('#modelLastRun').textContent = lastRun ? `最近运行：${formatDate(lastRun)}` : '尚无运行记录';
-  if (!state.models.length) grid.append(make('p', 'empty-state', '还没有监测模型，点击“新建模型”开始沉淀。'));
+  if ($('#modelLastRun')) $('#modelLastRun').textContent = lastRun ? `最近运行：${formatDate(lastRun)}` : '尚无运行记录';
 }
 
 async function selectModel(model) {
+  if (!model?.id) return;
   try { model = await apiRequest(`/api/models/${model.id}`); } catch (_) {}
-  state.currentModel = model; renderModelCards();
-  $('#modelDetailCode').textContent = `${model.id} / VERSION ${model.current_version}`;
-  $('#modelDetailName').textContent = model.name;
-  $('#modelDetailPurpose').textContent = model.purpose || '暂无用途说明';
-  const rules = $('#modelRuleList'); rules.replaceChildren();
-  (model.rule_definitions || []).forEach(rule => {
-    const row = make('div'); const copy = make('span');
-    copy.append(make('strong', '', rule.name), make('small', '', rule.description || '规则说明待补充'));
-    row.append(make('b', '', rule.id), copy, make('em', '', '规则')); rules.append(row);
-  });
-  if (!(model.rule_definitions || []).length) rules.append(make('p', 'empty-state', '暂无规则定义'));
-  const deps = $('#modelDependencies'); deps.replaceChildren();
-  (model.dependency_ids || []).forEach((dependency, index, items) => {
-    deps.append(make('span', '', dependency)); if (index < items.length - 1) deps.append(make('i', '', '→'));
-  });
-  if ((model.dependency_ids || []).length) { deps.append(make('i', '', '→'), make('strong', '', model.id)); }
-  else deps.append(make('span', '', '暂无依赖对象'));
+  state.currentModel = model;
+  renderModelCards();
+  const detail = $('#ledgerModelDetail');
+  if (detail) detail.hidden = false;
+  if ($('#modelDetailCode')) $('#modelDetailCode').textContent = `${model.id} / VERSION ${model.current_version}`;
+  if ($('#modelDetailName')) $('#modelDetailName').textContent = model.name;
+  if ($('#modelDetailPurpose')) $('#modelDetailPurpose').textContent = model.purpose || '暂无用途说明';
+  const rules = $('#modelRuleList');
+  if (rules) {
+    rules.replaceChildren();
+    (model.rule_definitions || []).forEach(rule => {
+      const row = make('div'); const copy = make('span');
+      copy.append(make('strong', '', rule.name), make('small', '', rule.description || '规则说明待补充'));
+      row.append(make('b', '', rule.id), copy, make('em', '', '规则')); rules.append(row);
+    });
+    if (!(model.rule_definitions || []).length) rules.append(make('p', 'empty-state', '暂无规则定义'));
+  }
+  const deps = $('#modelDependencies');
+  if (deps) {
+    deps.replaceChildren();
+    (model.dependency_ids || []).forEach((dependency, index, items) => {
+      deps.append(make('span', '', dependency)); if (index < items.length - 1) deps.append(make('i', '', '→'));
+    });
+    if ((model.dependency_ids || []).length) { deps.append(make('i', '', '→'), make('strong', '', model.id)); }
+    else deps.append(make('span', '', '暂无依赖对象'));
+  }
   renderModelSteps(model);
   renderModelVersions(model);
   try { renderModelRuns(await apiRequest(`/api/models/${model.id}/runs`)); }
   catch (error) { showToast(error.message); }
+  $$('#ledgerModelList .soft-ledger-model-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.modelId === model.id);
+  });
+  if (state.ledgerDetail?.relations) {
+    const relation = state.ledgerDetail.relations.find(item => item.entity_type === 'model' && item.entity_id === model.id);
+    state.ledgerModelRelationId = relation?.id || null;
+  }
 }
 
 function renderModelSteps(model) {
@@ -2968,18 +2982,76 @@ function parseModelLines(value, type) {
 }
 
 async function refreshModels(selectedId = null) {
-  state.models = await apiRequest('/api/models'); renderModelCards(); renderTodayModelsHome(); updateNavCounts();
-  const selected = state.models.find(model => model.id === selectedId) || state.models[0];
-  if (selected) await selectModel(selected);
-  else state.currentModel = null;
+  state.models = await apiRequest('/api/models');
+  renderModelCards();
+  renderTodayModelsHome();
+  updateNavCounts();
+  const selected = state.models.find(model => model.id === selectedId) || (state.currentModel && state.models.find(model => model.id === state.currentModel.id));
+  if (selected && $('#ledgerModelDetail') && !$('#ledgerModelDetail').hidden) await selectModel(selected);
+  else if (!selected) state.currentModel = null;
 }
 
-$('#newModelButton').addEventListener('click', () => openModelForm());
-$('#editModelButton').addEventListener('click', () => state.currentModel && openModelForm(state.currentModel));
-$('#deleteModelButton').addEventListener('click', async () => {
+async function bindModelToCurrentProject(modelId, note = '台账绑定监测模型') {
+  if (!state.currentProject?.id || !modelId) return;
+  const exists = (state.ledgerDetail?.relations || []).some(item => item.entity_type === 'model' && item.entity_id === modelId);
+  if (exists) return;
+  await apiRequest(`/api/projects/${state.currentProject.id}/relations`, {
+    method: 'POST',
+    body: JSON.stringify({
+      entity_type: 'model',
+      entity_id: modelId,
+      relation_type: 'dependency',
+      note,
+    }),
+  });
+}
+
+$('#newModelButton')?.addEventListener('click', () => openModelForm());
+$('#editModelButton')?.addEventListener('click', () => state.currentModel && openModelForm(state.currentModel));
+$('#deleteModelButton')?.addEventListener('click', async () => {
   if (!state.currentModel || !window.confirm(`确认删除模型“${state.currentModel.name}”及其运行、版本记录吗？`)) return;
-  try { await apiRequest(`/api/models/${state.currentModel.id}`, { method: 'DELETE' }); await refreshModels(); showToast('监测模型已删除'); }
-  catch (error) { showToast(error.message); }
+  try {
+    await apiRequest(`/api/models/${state.currentModel.id}`, { method: 'DELETE' });
+    state.currentModel = null;
+    if ($('#ledgerModelDetail')) $('#ledgerModelDetail').hidden = true;
+    await refreshModels();
+    if (state.currentProject) await openProjectRelations(state.currentProject);
+    showToast('监测模型已删除');
+  } catch (error) { showToast(error.message); }
+});
+$('#unbindLedgerModelButton')?.addEventListener('click', async () => {
+  if (!state.currentProject || !state.currentModel) return;
+  const relationId = state.ledgerModelRelationId
+    || (state.ledgerDetail?.relations || []).find(item => item.entity_type === 'model' && item.entity_id === state.currentModel.id)?.id;
+  if (!relationId) { showToast('未找到绑定关系'); return; }
+  if (!window.confirm(`确认解除监管项与模型“${state.currentModel.name}”的绑定吗？模型本身不会删除。`)) return;
+  try {
+    await apiRequest(`/api/projects/${state.currentProject.id}/relations/${relationId}`, { method: 'DELETE' });
+    state.currentModel = null;
+    state.ledgerModelRelationId = null;
+    if ($('#ledgerModelDetail')) $('#ledgerModelDetail').hidden = true;
+    await refreshProjects();
+    await openProjectRelations(state.currentProject);
+    setLedgerDetailTab('models');
+    showToast('已解除模型绑定');
+  } catch (error) { showToast(error.message); }
+});
+$('#bindExistingModelButton')?.addEventListener('click', async () => {
+  if (!state.currentProject) return;
+  const linkedIds = new Set((state.ledgerDetail?.relations || []).filter(item => item.entity_type === 'model').map(item => item.entity_id));
+  const candidates = (state.models || []).filter(model => !linkedIds.has(model.id));
+  if (!candidates.length) { showToast('没有可绑定的未关联模型，可先新建'); return; }
+  const pick = window.prompt(`输入要绑定的模型编号：\n${candidates.map(item => `${item.id} ${item.name}`).join('\n')}`, candidates[0].id);
+  if (!pick) return;
+  try {
+    await bindModelToCurrentProject(pick.trim());
+    await refreshProjects();
+    await openProjectRelations(state.currentProject);
+    setLedgerDetailTab('models');
+    const model = state.models.find(item => item.id === pick.trim());
+    if (model) await selectModel(model);
+    showToast('模型已绑定到监管项');
+  } catch (error) { showToast(error.message); }
 });
 $('#modelForm').addEventListener('submit', async event => {
   event.preventDefault(); const id = $('#modelId').value;
@@ -2990,8 +3062,21 @@ $('#modelForm').addEventListener('submit', async event => {
     related_sql_ids: splitValues($('#modelSqlIds').value), update_steps: parseModelLines($('#modelSteps').value, 'step'),
     change_summary: $('#modelChangeSummary').value.trim() || (id ? '更新模型配置' : '创建监测模型'),
   };
-  try { const saved = await apiRequest(id ? `/api/models/${id}` : '/api/models', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) }); closeModal($('#modelModal')); await refreshModels(saved.id); showToast(id ? '监测模型已更新' : '监测模型已创建'); }
-  catch (error) { showToast(error.message); }
+  try {
+    const saved = await apiRequest(id ? `/api/models/${id}` : '/api/models', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
+    closeModal($('#modelModal'));
+    if (!id && state.currentProject) {
+      try { await bindModelToCurrentProject(saved.id, '新建模型并绑定台账'); } catch (_) {}
+    }
+    await refreshModels(saved.id);
+    await refreshProjects();
+    if (state.currentProject) {
+      await openProjectRelations(state.currentProject);
+      setLedgerDetailTab('models');
+      await selectModel(saved);
+    }
+    showToast(id ? '监测模型已更新' : '监测模型已创建并绑定');
+  } catch (error) { showToast(error.message); }
 });
 
 function renderModelRuns(runs) {
@@ -3040,10 +3125,33 @@ async function refreshProjects() {
   renderTodayProjects();
 }
 
+function renderLedgerOverview() {
+  const all = state.projects || [];
+  const active = all.filter(item => item.status === 'active').length;
+  const modelBound = all.filter(item => (item.model_count || 0) > 0).length;
+  const attention = all.reduce((sum, item) => sum + (item.model_attention || 0), 0);
+  const pending = all.reduce((sum, item) => sum + (item.pending_steps || 0), 0);
+  if ($('#ledgerTotalCount')) $('#ledgerTotalCount').textContent = String(all.length);
+  if ($('#ledgerActiveCount')) $('#ledgerActiveCount').textContent = String(active);
+  if ($('#ledgerModelCount')) $('#ledgerModelCount').textContent = String(modelBound);
+  if ($('#ledgerAttentionCount')) $('#ledgerAttentionCount').textContent = String(attention);
+  if ($('#ledgerPendingSteps')) $('#ledgerPendingSteps').textContent = String(pending);
+}
+
+function modelStatusLabel(status) {
+  return ({
+    normal: ['运行正常', 'done'],
+    update_due: ['待更新', 'waiting'],
+    paused: ['已暂停', 'waiting'],
+    archived: ['已归档', 'waiting'],
+  })[status] || [status || '未知', 'waiting'];
+}
+
 function renderProjects() {
   const board = $('#projectBoard');
   if (!board) return;
   board.replaceChildren();
+  renderLedgerOverview();
   const items = filteredLedgerProjects();
   const hint = $('#ledgerResultHint');
   if (hint) hint.textContent = `${items.length} 项`;
@@ -3070,6 +3178,7 @@ function renderProjects() {
     const grid = make('div', 'soft-ledger-grid');
     groups.get(category).forEach(project => {
       const card = make('article', 'soft-ledger-card');
+      if (project.model_attention) card.classList.add('needs-attention');
       card.tabIndex = 0;
       card.setAttribute('role', 'button');
       card.setAttribute('aria-label', `查看监管项 ${project.name}`);
@@ -3079,12 +3188,26 @@ function renderProjects() {
         make('span', 'soft-ledger-cycle', ledgerCycleLabel(project.monitor_cycle)),
         make('em', `status ${status[1]}`, status[0]),
       );
+      const models = project.linked_models || [];
+      if (models.length) {
+        const chip = make('div', 'soft-ledger-model-chip');
+        const primary = models[0];
+        const mStatus = modelStatusLabel(primary.status);
+        chip.append(
+          make('strong', '', primary.name || primary.id),
+          make('em', `status ${mStatus[1]}`, mStatus[0]),
+        );
+        if (models.length > 1) chip.append(make('span', '', `+${models.length - 1}`));
+        card.append(header, chip);
+      } else {
+        card.append(header);
+      }
       const latest = project.latest_execution;
       const meta = make('div', 'project-meta soft-ledger-meta');
       [
         ['最近执行', latest ? `${ledgerExecLabel(latest.result)} · ${(latest.executed_at || '').slice(0, 10) || '—'}` : '尚未登记'],
         ['待办步骤', `${project.pending_steps || 0}`],
-        ['关联资产', `${project.relation_count || 0}`],
+        ['监测模型', models.length ? `${models.length} 个` : '未绑定'],
       ].forEach(([label, value]) => {
         const item = make('span');
         item.append(make('small', '', label), document.createTextNode(value));
@@ -3093,7 +3216,6 @@ function renderProjects() {
       const footer = make('footer');
       footer.append(make('span', '', '下一步'), make('strong', '', project.next_action || '待安排'));
       card.append(
-        header,
         make('h3', '', project.name),
         make('p', '', project.goal || project.plan_detail || '暂未填写规划摘要。'),
         meta,
@@ -3120,7 +3242,37 @@ function setLedgerDetailTab(tab) {
   });
 }
 
-async function openProjectRelations(project) {
+async function renderLedgerModels(models = []) {
+  const list = $('#ledgerModelList');
+  const detail = $('#ledgerModelDetail');
+  if (!list) return;
+  list.replaceChildren();
+  if (!models.length) {
+    if (detail) detail.hidden = true;
+    state.currentModel = null;
+    list.append(make('p', 'empty-state', '本监管项尚未绑定监测模型。可新建并绑定，或绑定已有模型。'));
+    return;
+  }
+  models.forEach(model => {
+    const card = make('button', 'soft-ledger-model-card');
+    card.type = 'button';
+    card.dataset.modelId = model.id;
+    const status = modelStatusLabel(model.status);
+    card.append(
+      make('strong', '', model.name || model.id),
+      make('small', '', `${model.id} · ${model.current_version || 'v1.0'} · 命中 ${model.hit_count || 0}`),
+      make('em', `status ${status[1]}`, status[0]),
+    );
+    card.classList.toggle('active', state.currentModel?.id === model.id);
+    card.addEventListener('click', () => selectModel(model));
+    list.append(card);
+  });
+  const preferred = models.find(item => item.id === state.currentModel?.id) || models[0];
+  if (preferred) await selectModel(preferred);
+  else if (detail) detail.hidden = true;
+}
+
+async function openProjectRelations(project, preferredTab = null) {
   try {
     const data = await apiRequest(`/api/projects/${project.id}`);
     state.currentProject = data.project;
@@ -3131,7 +3283,9 @@ async function openProjectRelations(project) {
     renderProjectRelations(data.relations || []);
     renderLedgerSteps(data.update_steps || []);
     renderLedgerExecutions(data.executions || []);
-    setLedgerDetailTab(state.ledgerDetailTab || 'overview');
+    await renderLedgerModels(data.models || data.project.linked_models || []);
+    fillRelationEntityPick($('#relationEntityType')?.value || 'sql_asset');
+    setLedgerDetailTab(preferredTab || state.ledgerDetailTab || 'overview');
     openModal($('#projectRelationModal'));
   } catch (error) { showToast(error.message); }
 }
@@ -3144,9 +3298,9 @@ function renderProjectDetail(data) {
   [
     ['分类', project.category || '—'],
     ['周期', ledgerCycleLabel(project.monitor_cycle)],
+    ['监测模型', `${project.model_count || 0}`],
     ['待办步骤', `${project.pending_steps || 0}`],
     ['最近执行', latest ? ledgerExecLabel(latest.result) : '尚未登记'],
-    ['关联资产', `${project.relation_count || 0}`],
   ].forEach(([label, value]) => {
     const item = make('div');
     item.append(make('span', '', label), make('strong', '', String(value)));
@@ -3246,6 +3400,16 @@ $('#ledgerCategoryFilters')?.addEventListener('click', event => {
   if (!button) return;
   state.ledgerCategory = button.dataset.ledgerCategory || 'all';
   $$('#ledgerCategoryFilters [data-ledger-category]').forEach(item => {
+    item.classList.toggle('active', item === button);
+  });
+  renderProjects();
+});
+
+$('#ledgerFocusFilters')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-ledger-focus]');
+  if (!button) return;
+  state.ledgerFocus = button.dataset.ledgerFocus || 'all';
+  $$('#ledgerFocusFilters [data-ledger-focus]').forEach(item => {
     item.classList.toggle('active', item === button);
   });
   renderProjects();
@@ -3433,27 +3597,74 @@ function renderProjectRelations(relations) {
         showToast('关联已移除');
       } catch (error) { showToast(error.message); }
     });
+    if (relation.entity_type === 'model') {
+      row.addEventListener('click', async () => {
+        setLedgerDetailTab('models');
+        const model = state.models.find(item => item.id === relation.entity_id) || { id: relation.entity_id, name: relation.entity_label };
+        await selectModel(model);
+      });
+      row.style.cursor = 'pointer';
+    }
     row.append(make('b', 'relation-badge', typeNames[relation.entity_type] || '对象'), copy, remove);
     list.append(row);
   });
 }
 
+function fillRelationEntityPick(entityType) {
+  const pick = $('#relationEntityPick');
+  const idInput = $('#relationEntityId');
+  const pickLabel = $('#relationEntityPickLabel');
+  const idLabel = $('#relationEntityIdLabel');
+  if (!pick) return;
+  pick.replaceChildren(make('option', '', '请选择…'));
+  pick.querySelector('option').value = '';
+  const sources = {
+    sql_asset: (state.sqlAssets || []).map(item => [item.id, item.name || item.id]),
+    model: (state.models || []).map(item => [item.id, item.name || item.id]),
+    task: (state.focusTasks || state.tasks || []).map(item => [item.id, item.title || item.id]),
+    data_request: (state.requests || []).map(item => [item.id, item.title || item.id]),
+    note: (state.notes || []).map(item => [item.id, item.title || item.id]),
+  };
+  const options = sources[entityType] || [];
+  options.forEach(([id, label]) => {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = `${id} · ${label}`;
+    pick.append(option);
+  });
+  const hasOptions = options.length > 0;
+  if (pickLabel) pickLabel.hidden = !hasOptions;
+  if (idLabel) idLabel.hidden = hasOptions;
+  if (idInput && hasOptions) idInput.value = '';
+}
+
+$('#relationEntityType')?.addEventListener('change', () => {
+  fillRelationEntityPick($('#relationEntityType').value);
+});
+
+$('#relationEntityPick')?.addEventListener('change', () => {
+  if ($('#relationEntityId')) $('#relationEntityId').value = $('#relationEntityPick').value || '';
+});
+
 $('#ledgerRelationAddForm')?.addEventListener('submit', async event => {
   event.preventDefault();
   const projectId = $('#relationProjectId').value;
+  const entityId = ($('#relationEntityPick')?.value || $('#relationEntityId')?.value || '').trim();
+  if (!entityId) { showToast('请选择或填写关联对象'); return; }
   const payload = {
     entity_type: $('#relationEntityType').value,
-    entity_id: $('#relationEntityId').value.trim(),
+    entity_id: entityId,
     relation_type: $('#relationType').value,
     note: $('#relationNote').value.trim(),
   };
   try {
     await apiRequest(`/api/projects/${projectId}/relations`, { method: 'POST', body: JSON.stringify(payload) });
-    $('#relationEntityId').value = '';
+    if ($('#relationEntityId')) $('#relationEntityId').value = '';
+    if ($('#relationEntityPick')) $('#relationEntityPick').value = '';
     $('#relationNote').value = '';
     await refreshProjects();
     state.currentProject = state.projects.find(item => item.id === projectId) || state.currentProject;
-    await openProjectRelations(state.currentProject);
+    await openProjectRelations(state.currentProject, payload.entity_type === 'model' ? 'models' : null);
     showToast('关联已添加');
   } catch (error) { showToast(error.message); }
 });
@@ -3467,7 +3678,22 @@ async function openSearchResult(result) {
   if (result.entity_type === 'procedure') { showView('procedures'); await openProcedureForm(result.id); return; }
   if (result.entity_type === 'task') { showView('week'); openEntityDrawer('task', await apiRequest(`/api/tasks/${result.id}`)); return; }
   if (result.entity_type === 'model') {
-    showView('models'); const model = state.models.find(item => item.id === result.id); if (model) await selectModel(model); return;
+    showView('projects');
+    let detail = null;
+    try { detail = await apiRequest(`/api/models/${result.id}`); } catch (_) {}
+    const projectId = detail?.linked_project_id || detail?.linked_projects?.[0]?.id;
+    const project = state.projects.find(item => item.id === projectId)
+      || state.projects.find(item => (item.linked_models || []).some(model => model.id === result.id));
+    if (project) {
+      await openProjectRelations(project, 'models');
+      const model = state.models.find(item => item.id === result.id) || detail || { id: result.id };
+      await selectModel(model);
+    } else {
+      showToast('该模型尚未绑定台账，请先在监管项中绑定');
+      state.ledgerFocus = 'all';
+      renderProjects();
+    }
+    return;
   }
   if (result.entity_type === 'project') {
     showView('projects'); const project = state.projects.find(item => item.id === result.id); if (project) await openProjectRelations(project); return;
@@ -4603,7 +4829,7 @@ async function bootstrapApi() {
     state.notes = notes.map(normalizeNote); state.requests = requests; state.sqlAssets = sqlAssets;
     state.procedures = procedures; state.models = models; state.projects = projects; state.navigation = navigation;
     state.reportTemplates = reportTemplates; state.genericReports = genericReports; state.projectTemplates = projectTemplates;
-    state.currentModel = models[0] || null;
+    state.currentModel = null;
     try {
       const settings = await apiRequest('/api/settings');
       state.settings = settings;
@@ -4619,7 +4845,6 @@ async function bootstrapApi() {
     applyHomeLayout(state.homeLayout);
     wireHomeLayoutDrag();
     renderSavedNotes(); renderRequests(); renderTodayRequests(); renderSqlAssets(); renderTodaySqlHome(); renderProcedures(); renderProjects(); renderTodayProjects(); renderTodayModelsHome(); renderTodayNotesHome(); renderNavigation(); renderTodayQuickLinks(); renderReportTemplateOptions(); renderGenericReportHistory(); updateBatchButtons();
-    if (state.currentModel) await selectModel(state.currentModel);
     state._bootstrapping = true;
     try {
       await Promise.all([refreshWeekTasks(), refreshTodayTasks(), refreshTodayCalendar(), maybeAutoBackup()]);

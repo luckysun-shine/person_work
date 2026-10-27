@@ -594,6 +594,8 @@ LEDGER_CATALOG: list[tuple[str, str, str, int]] = [
     ("经销商监管类", "经销商补贴监管", "月", 60),
     ("经销商监管类", "经销商门店竞品分析", "月", 70),
     ("经销商监管类", "经销商广告补贴监管", "月", 80),
+    ("合作商监管类", "采购付款异常监测", "日", 5),
+    ("合作商监管类", "资产处置合规监测", "周", 8),
     ("合作商监管类", "监察物料BOM调整提示", "周", 10),
     ("合作商监管类", "合作商关联关系及异常风险监管", "月", 20),
     ("AI助力管理类", "林氏风险账单", "日", 10),
@@ -605,8 +607,15 @@ LEDGER_CATALOG: list[tuple[str, str, str, int]] = [
 LEDGER_CATEGORIES = ("员工监管类", "经销商监管类", "合作商监管类", "AI助力管理类")
 
 
+MODEL_LEDGER_LINKS: list[tuple[str, str, str]] = [
+    # model_id, ledger category, ledger name
+    ("M-014", "合作商监管类", "采购付款异常监测"),
+    ("M-011", "合作商监管类", "资产处置合规监测"),
+]
+
+
 def seed_monitor_ledger(connection: sqlite3.Connection, now: str | None = None) -> None:
-    """Idempotently ensure the standard 22 ledger items exist."""
+    """Idempotently ensure the standard ledger items exist and link seed models."""
     stamp = now or utc_now()
     for category, name, cycle, sort_order in LEDGER_CATALOG:
         existing = connection.execute(
@@ -650,6 +659,38 @@ def seed_monitor_ledger(connection: sqlite3.Connection, now: str | None = None) 
                 "",
                 "",
                 stamp,
+                stamp,
+            ),
+        )
+    seed_model_ledger_links(connection, stamp)
+
+
+def seed_model_ledger_links(connection: sqlite3.Connection, now: str | None = None) -> None:
+    """Bind seed monitoring models into corresponding ledger items."""
+    stamp = now or utc_now()
+    for model_id, category, name in MODEL_LEDGER_LINKS:
+        model = connection.execute(
+            "SELECT id FROM monitoring_models WHERE id = ?", (model_id,)
+        ).fetchone()
+        if not model:
+            continue
+        project = connection.execute(
+            "SELECT id FROM projects WHERE name = ? AND category = ?",
+            (name, category),
+        ).fetchone()
+        if not project:
+            continue
+        connection.execute(
+            """INSERT OR IGNORE INTO project_relations
+            (id,project_id,entity_type,entity_id,relation_type,note,created_at)
+            VALUES (?,?,?,?,?,?,?)""",
+            (
+                new_id("PR"),
+                project["id"],
+                "model",
+                model_id,
+                "dependency",
+                "台账绑定监测模型",
                 stamp,
             ),
         )

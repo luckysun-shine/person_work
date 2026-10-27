@@ -77,6 +77,18 @@ from ..secrets_util import decrypt_secret, encrypt_secret, mask_secret
 
 router = APIRouter(tags=["projects"])
 
+def _linked_models_for_project(project_id: str) -> list[dict]:
+    return C.fetch_all(
+        """SELECT m.id, m.name, m.status, m.current_version, m.schedule,
+                  m.last_run_at, m.hit_count, m.pending_review_count, m.purpose
+        FROM project_relations r
+        INNER JOIN monitoring_models m ON m.id = r.entity_id
+        WHERE r.project_id = ? AND r.entity_type = 'model'
+        ORDER BY m.updated_at DESC""",
+        (project_id,),
+    )
+
+
 def _attach_ledger_summary(items: list[dict]) -> list[dict]:
     for item in items:
         latest = C.fetch_one(
@@ -89,9 +101,17 @@ def _attach_ledger_summary(items: list[dict]) -> list[dict]:
             WHERE project_id = ? AND status != 'done'""",
             (item["id"],),
         )
+        models = _linked_models_for_project(item["id"])
         item["latest_execution"] = latest
         item["pending_steps"] = int((pending_steps or {}).get("c") or 0)
         item["relation_count"] = int(item.get("relation_count") or 0)
+        item["linked_models"] = models
+        item["model_count"] = len(models)
+        item["model_attention"] = sum(
+            1
+            for model in models
+            if model.get("status") == "update_due" or int(model.get("pending_review_count") or 0) > 0
+        )
     return items
 
 
@@ -208,6 +228,9 @@ def create_project(payload: ProjectCreate) -> dict:
     project["latest_execution"] = None
     project["pending_steps"] = 0
     project["relation_count"] = 0
+    project["linked_models"] = []
+    project["model_count"] = 0
+    project["model_attention"] = 0
     return project
 
 
@@ -259,12 +282,20 @@ def get_project(project_id: str) -> dict:
         WHERE project_id = ? ORDER BY executed_at DESC, created_at DESC""",
         (project_id,),
     )
+    linked_models = _linked_models_for_project(project_id)
     project["relation_count"] = len(relations)
     project["task_total"] = len(direct_tasks)
     project["task_done"] = sum(task["status"] == "done" for task in direct_tasks)
     project["request_total"] = len(related_requests)
     project["pending_steps"] = sum(1 for step in steps if step.get("status") != "done")
     project["latest_execution"] = executions[0] if executions else None
+    project["linked_models"] = linked_models
+    project["model_count"] = len(linked_models)
+    project["model_attention"] = sum(
+        1
+        for model in linked_models
+        if model.get("status") == "update_due" or int(model.get("pending_review_count") or 0) > 0
+    )
     return {
         "project": project,
         "relations": relations,
@@ -272,6 +303,7 @@ def get_project(project_id: str) -> dict:
         "requests": related_requests,
         "update_steps": steps,
         "executions": executions,
+        "models": linked_models,
     }
 
 

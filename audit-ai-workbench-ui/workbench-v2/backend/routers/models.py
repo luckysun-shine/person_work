@@ -111,6 +111,16 @@ def get_model(model_id: str) -> dict:
     model["versions"] = C.fetch_all(
         "SELECT * FROM model_versions WHERE model_id = ? ORDER BY created_at DESC, rowid DESC", (model_id,)
     )
+    linked = C.fetch_all(
+        """SELECT p.id, p.name, p.category, p.status
+        FROM project_relations r
+        INNER JOIN projects p ON p.id = r.project_id
+        WHERE r.entity_type = 'model' AND r.entity_id = ?
+        ORDER BY p.updated_at DESC""",
+        (model_id,),
+    )
+    model["linked_projects"] = linked
+    model["linked_project_id"] = linked[0]["id"] if linked else None
     return model
 
 
