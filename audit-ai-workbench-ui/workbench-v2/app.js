@@ -3447,15 +3447,26 @@ function renderProjectDetail(data) {
   const summary = $('#projectDetailSummary');
   summary.replaceChildren();
   const latest = project.latest_execution;
-  [
-    ['分类', project.category || '—'],
-    ['周期', ledgerCycleLabel(project.monitor_cycle)],
-    ['监测模型', `${project.model_count || 0}`],
-    ['待办步骤', `${project.pending_steps || 0}`],
-    ['最近执行', latest ? ledgerExecLabel(latest.result) : '尚未登记'],
-  ].forEach(([label, value]) => {
-    const item = make('div');
-    item.append(make('span', '', label), make('strong', '', String(value)));
+  const modelCount = Number(project.model_count || 0);
+  const pendingSteps = Number(project.pending_steps || 0);
+  const metrics = [
+    { key: 'category', label: '分类', value: project.category || '—', tone: 'neutral' },
+    { key: 'cycle', label: '监管周期', value: ledgerCycleLabel(project.monitor_cycle), tone: 'neutral', pill: true },
+    { key: 'models', label: '监测模型', value: String(modelCount), tone: modelCount > 0 ? 'ok' : 'muted', numeric: true },
+    { key: 'steps', label: '待办步骤', value: String(pendingSteps), tone: pendingSteps > 0 ? 'warn' : 'ok', numeric: true },
+    {
+      key: 'exec',
+      label: '最近执行',
+      value: latest ? ledgerExecLabel(latest.result) : '尚未登记',
+      tone: latest ? (latest.result === 'failed' ? 'danger' : 'ok') : 'muted',
+    },
+  ];
+  metrics.forEach(metric => {
+    const item = make('div', `soft-ledger-metric is-${metric.tone}${metric.numeric ? ' is-numeric' : ''}`);
+    item.dataset.metric = metric.key;
+    item.append(make('span', '', metric.label));
+    if (metric.pill) item.append(make('em', 'soft-ledger-metric-pill', String(metric.value)));
+    else item.append(make('strong', '', String(metric.value)));
     summary.append(item);
   });
   $('#projectName').value = project.name || '';

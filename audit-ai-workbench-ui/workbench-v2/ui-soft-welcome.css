@@ -2658,27 +2658,109 @@ body.theme-soft-welcome .soft-ledger-detail .soft-ledger-tabs {
   margin: 8px 0 16px;
   flex-wrap: wrap;
 }
-body.theme-soft-welcome .soft-ledger-summary {
+body.theme-soft-welcome .soft-ledger-summary,
+body.theme-soft-welcome .modal-card > .project-detail-summary.soft-ledger-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  margin: 4px 24px 16px;
+  padding: 4px;
+  border: 1px solid var(--hig-separator);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, #FFFDF6 0%, #FAF6EC 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+  overflow: hidden;
 }
-body.theme-soft-welcome .soft-ledger-summary > div {
-  padding: 10px 12px;
-  border-radius: 16px;
-  background: rgba(28, 28, 28, .04);
+body.theme-soft-welcome .soft-ledger-summary > .soft-ledger-metric {
+  position: relative;
+  min-height: 78px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  border-radius: 0;
+}
+body.theme-soft-welcome .soft-ledger-summary > .soft-ledger-metric + .soft-ledger-metric::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 1px;
+  background: rgba(28, 28, 28, .08);
 }
 body.theme-soft-welcome .soft-ledger-summary span {
   color: var(--hig-tertiary);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: .04em;
 }
 body.theme-soft-welcome .soft-ledger-summary strong {
-  font-size: 14px;
+  color: var(--sw-ink);
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -.02em;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+body.theme-soft-welcome .soft-ledger-summary .is-numeric strong {
+  font-family: var(--hig-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.04em;
+}
+body.theme-soft-welcome .soft-ledger-metric-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #FFF1C2;
+  color: #7A4E00;
+  font-size: 12px;
+  font-weight: 750;
+  font-style: normal;
+}
+body.theme-soft-welcome .soft-ledger-summary .is-ok strong {
+  color: #2F6B3A;
+}
+body.theme-soft-welcome .soft-ledger-summary .is-warn strong {
+  color: #A67908;
+}
+body.theme-soft-welcome .soft-ledger-summary .is-danger strong {
+  color: #B42318;
+}
+body.theme-soft-welcome .soft-ledger-summary .is-muted strong {
+  color: var(--hig-tertiary);
+  font-weight: 650;
+}
+@media (max-width: 980px) {
+  body.theme-soft-welcome .soft-ledger-summary,
+  body.theme-soft-welcome .modal-card > .project-detail-summary.soft-ledger-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  body.theme-soft-welcome .soft-ledger-summary > .soft-ledger-metric:nth-child(2n + 1)::before {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  body.theme-soft-welcome .soft-ledger-summary,
+  body.theme-soft-welcome .modal-card > .project-detail-summary.soft-ledger-summary {
+    grid-template-columns: 1fr;
+    margin-inline: 16px;
+  }
+  body.theme-soft-welcome .soft-ledger-summary > .soft-ledger-metric + .soft-ledger-metric::before {
+    left: 16px;
+    right: 16px;
+    top: 0;
+    bottom: auto;
+    width: auto;
+    height: 1px;
+  }
 }
 body.theme-soft-welcome .soft-ledger-inline-form {
   display: grid;
