@@ -158,6 +158,8 @@ class ModelCreate(BaseModel):
     dependency_ids: list[str] = Field(default_factory=list, max_length=100)
     related_sql_ids: list[str] = Field(default_factory=list, max_length=100)
     update_steps: list[ModelStep] = Field(default_factory=list, max_length=30)
+    sql_text: str = Field(default="", max_length=200000)
+    sql_current_version: str = Field(default="v1.0", min_length=1, max_length=40)
     change_summary: str = Field(default="创建监测模型", max_length=1000)
 
 
@@ -171,7 +173,15 @@ class ModelUpdate(BaseModel):
     dependency_ids: list[str] | None = Field(default=None, max_length=100)
     related_sql_ids: list[str] | None = Field(default=None, max_length=100)
     update_steps: list[ModelStep] | None = Field(default=None, max_length=30)
+    sql_text: str | None = Field(default=None, max_length=200000)
+    sql_current_version: str | None = Field(default=None, min_length=1, max_length=40)
     change_summary: str | None = Field(default=None, max_length=1000)
+
+
+class ModelSqlVersionCreate(BaseModel):
+    version: str = Field(min_length=1, max_length=40)
+    sql_text: str = Field(default="", max_length=200000)
+    change_summary: str = Field(default="", max_length=2000)
 
 
 class ProjectRelationCreate(BaseModel):

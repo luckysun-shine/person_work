@@ -13,7 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='10' fill='%231C1C1C'/%3E%3Cpath d='M18 6.5 27.5 10.2v7.2c0 6.1-4 10.6-9.5 12.4-5.5-1.8-9.5-6.3-9.5-12.4v-7.2L18 6.5Z' fill='none' stroke='%23F5C84B' stroke-width='1.9' stroke-linejoin='round'/%3E%3Cpath d='M13.5 20.5v-4m4.5 4v-7m4.5 7v-2.5' stroke='%23FFF1C2' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='22.5' cy='13.5' r='1.7' fill='%23F5C84B'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css?v=1.0.0">
   <link rel="stylesheet" href="ui-apple-hig.css?v=1.9.17">
-  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.20">
+  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.21">
 </head>
 <body class="theme-soft-welcome">
   <div class="app-shell">
@@ -664,7 +664,7 @@
 
   <div class="modal" id="sqlVersionModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="sqlVersionForm"><header><div><p class="eyebrow">SQL VERSION</p><h2>创建新版本</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><div class="form-grid modal-form-grid"><label>版本号<input id="versionName" required placeholder="例如 v2.5"></label><label>验证状态<select id="versionStatus"><option value="draft">草稿</option><option value="validated">已验证</option><option value="archived">已归档</option></select></label><label class="span-2">变更说明<textarea id="versionSummary" class="soft-area" rows="3" required placeholder="说明本次调整原因和影响"></textarea></label><label class="span-2">SQL 文本<textarea id="versionSqlText" class="code-input" rows="16" required spellcheck="false"></textarea></label></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存并设为当前版本</button></footer></form></div>
 
-  <div class="modal" id="modelModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="modelForm"><header><div><p class="eyebrow">MONITORING MODEL</p><h2 id="modelModalTitle">新建监测模型</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="modelId"><div class="form-grid modal-form-grid"><label class="span-2">模型名称<input id="modelName" required></label><label>当前版本<input id="modelVersion" value="v1.0" required></label><label>状态<select id="modelStatus"><option value="normal">运行正常</option><option value="update_due">待更新</option><option value="paused">已暂停</option><option value="archived">已归档</option></select></label><label>调度计划<input id="modelSchedule" placeholder="例如：每日 06:30"></label><label class="span-2">关联 SQL<div class="assoc-picker" data-sql-picker="modelSqlIds"><input type="hidden" id="modelSqlIds" value=""><div class="assoc-chips" id="modelSqlChips"></div><select id="modelSqlAdd" class="assoc-add"><option value="">添加 SQL 资产…</option></select></div></label><label class="span-2">用途说明<textarea id="modelPurpose" class="soft-area" rows="3"></textarea></label><label class="span-2">规则定义<textarea id="modelRules" class="soft-area" rows="7" placeholder="每行一条：规则名称 | 规则说明"></textarea></label><label class="span-2">依赖对象<input id="modelDependenciesInput" placeholder="多个依赖用逗号分隔"></label><label class="span-2">更新步骤<textarea id="modelSteps" class="soft-area" rows="6" placeholder="每行一条：步骤名称 | 说明 | 完成/未完成"></textarea></label><label class="span-2">版本变更说明<input id="modelChangeSummary" placeholder="版本变化时填写"></label></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存模型</button></footer></form></div>
+  <div class="modal" id="modelModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="modelForm"><header><div><p class="eyebrow">MONITORING MODEL</p><h2 id="modelModalTitle">新建监测模型</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="modelId"><div class="form-grid modal-form-grid"><label class="span-2">模型名称<input id="modelName" required></label><label>当前版本<input id="modelVersion" value="v1.0" required></label><label>状态<select id="modelStatus"><option value="normal">运行正常</option><option value="update_due">待更新</option><option value="paused">已暂停</option><option value="archived">已归档</option></select></label><label>调度计划<input id="modelSchedule" placeholder="例如：每日 06:30"></label><label class="span-2">关联 SQL 资产<div class="assoc-picker" data-sql-picker="modelSqlIds"><input type="hidden" id="modelSqlIds" value=""><div class="assoc-chips" id="modelSqlChips"></div><select id="modelSqlAdd" class="assoc-add"><option value="">添加 SQL 资产…</option></select></div></label><label>SQL 版本<input id="modelSqlVersion" value="v1.0" placeholder="v1.0"></label><label class="span-2">SQL 逻辑代码<div class="request-sql-record"><div class="request-sql-toolbar"><span class="sql-lang-badge">SQL</span><span class="soft-result-hint" id="modelSqlVersionHint">当前 v1.0</span><button type="button" class="copy-button" id="copyModelSql"><svg><use href="#i-copy"/></svg><span>复制</span></button><button type="button" class="secondary-button" id="loadRelatedSqlIntoModel">从关联资产载入</button></div><textarea id="modelSqlText" class="code-input" rows="12" spellcheck="false" placeholder="粘贴本模型实际运行的 SQL 逻辑，可按版本留存…"></textarea></div></label><label class="span-2">用途说明<textarea id="modelPurpose" class="soft-area" rows="3"></textarea></label><label class="span-2">规则定义<textarea id="modelRules" class="soft-area" rows="7" placeholder="每行一条：规则名称 | 规则说明"></textarea></label><label class="span-2">依赖对象<input id="modelDependenciesInput" placeholder="多个依赖用逗号分隔"></label><label class="span-2">更新步骤<textarea id="modelSteps" class="soft-area" rows="6" placeholder="每行一条：步骤名称 | 说明 | 完成/未完成"></textarea></label><label class="span-2">版本变更说明<input id="modelChangeSummary" placeholder="版本变化时填写"></label></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存模型</button></footer></form></div>
 
   <div class="modal" id="procedureModal" aria-hidden="true"><form class="modal-card modal-card-sheet" id="procedureForm"><header><div><p class="eyebrow">STORED PROCEDURE</p><h2 id="procedureModalTitle">新建存储过程</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="procedureId"><div class="form-grid modal-form-grid"><label class="span-2">过程名称<input id="procedureName" required placeholder="例如：sp_audit_purchase_monitor"></label><label>数据库<input id="procedureDatabase"></label><label>Schema<input id="procedureSchema"></label><label>当前版本<input id="procedureVersion" value="v1.0" required></label><label>状态<select id="procedureStatus"><option value="draft">草稿</option><option value="testing">测试中</option><option value="active">生产启用</option><option value="paused">已暂停</option><option value="archived">已归档</option></select></label><label>负责人<input id="procedureOwner"></label><label>关联项目<select id="procedureProject"><option value="">未关联</option></select></label><label class="span-2">标签<input id="procedureTags" placeholder="采购, 模型支撑"></label><label class="span-2">用途说明<textarea id="procedurePurpose" class="soft-area" rows="3"></textarea></label><label class="span-2">过程定义<textarea id="procedureDefinition" class="code-input" rows="14" spellcheck="false"></textarea></label><label class="span-2">回滚脚本<textarea id="procedureRollback" class="code-input" rows="7" spellcheck="false"></textarea></label><label class="span-2">版本变更说明<input id="procedureChangeSummary"></label></div><section id="procedureLifecycle" hidden><div class="relation-manager"><section><h3>版本历史</h3><div id="procedureVersionList" class="history-list"></div></section><section><h3>环境发布</h3><div id="procedureDeploymentList" class="history-list"></div></section></div><div class="form-grid deployment-editor"><label>环境<select id="deploymentEnvironment"><option value="development">开发</option><option value="testing">测试</option><option value="production">生产</option></select></label><label>发布状态<select id="deploymentStatus"><option value="planned">计划中</option><option value="success">成功</option><option value="failed">失败</option><option value="rolled_back">已回滚</option></select></label><label>发布时间<input id="deploymentAt" type="datetime-local"></label><label>验证结果<input id="deploymentValidation"></label><label class="span-2">发布说明<input id="deploymentNotes"></label><label><input id="deploymentRollback" type="checkbox"> 已执行回滚</label><button type="button" class="secondary-button" id="saveDeploymentButton">记录发布</button></div></section><footer><button type="button" class="secondary-button danger-button" id="deleteProcedureButton" hidden>删除</button><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button">保存资产</button></footer></form></div>
 
@@ -786,6 +786,23 @@
         <button type="button" class="secondary-button danger-button" id="deleteNavigationButton" hidden>删除</button>
         <button type="button" class="secondary-button modal-close">取消</button>
         <button type="submit" class="primary-button" id="saveNavigationButton">保存导航</button>
+      </footer>
+    </form>
+  </div>
+
+  <div class="modal" id="modelSqlVersionModal" aria-hidden="true">
+    <form class="modal-card modal-card-wide" id="modelSqlVersionForm">
+      <header>
+        <div><p class="eyebrow">MODEL SQL VERSION</p><h2>另存模型 SQL 新版本</h2></div>
+        <button type="button" class="icon-button modal-close" aria-label="关闭"><svg><use href="#i-close"/></svg></button>
+      </header>
+      <div class="form-grid modal-form-grid">
+        <label>版本号<input id="modelNewSqlVersion" required placeholder="例如 v1.1"></label>
+        <label class="span-2">变更说明<textarea id="modelSqlChangeSummary" class="soft-area" rows="3" placeholder="说明本次 SQL 逻辑调整"></textarea></label>
+      </div>
+      <footer>
+        <button type="button" class="secondary-button modal-close">取消</button>
+        <button type="submit" class="primary-button">保存版本</button>
       </footer>
     </form>
   </div>
@@ -913,12 +930,27 @@
           </div>
           <div class="model-tabs soft-model-tabs">
             <button class="active" type="button" data-model-tab="rules">核心规则</button>
+            <button type="button" data-model-tab="sql">SQL 逻辑</button>
             <button type="button" data-model-tab="deps">依赖对象</button>
             <button type="button" data-model-tab="runs">运行记录</button>
             <button type="button" data-model-tab="steps">模型步骤</button>
-            <button type="button" data-model-tab="history">版本记录</button>
+            <button type="button" data-model-tab="history">配置版本</button>
           </div>
           <div class="model-tab active" id="model-tab-rules"><div class="rule-list" id="modelRuleList"></div></div>
+          <div class="model-tab" id="model-tab-sql">
+            <div class="soft-model-sql-panel">
+              <div class="request-sql-toolbar">
+                <span class="sql-lang-badge">SQL</span>
+                <select id="modelSqlVersionSelect" aria-label="SQL 版本"></select>
+                <span class="soft-result-hint" id="modelDetailSqlHint">当前 v1.0</span>
+                <button type="button" class="copy-button" id="copyModelDetailSql"><svg><use href="#i-copy"/></svg><span>复制</span></button>
+                <button type="button" class="secondary-button" id="saveModelSqlVersionButton">另存新版本</button>
+                <button type="button" class="secondary-button" id="restoreModelSqlVersionButton" hidden>恢复所选版本</button>
+              </div>
+              <textarea id="modelDetailSqlText" class="code-input" rows="14" spellcheck="false" placeholder="暂无 SQL 逻辑。可编辑后另存版本，或在编辑模型中填写。"></textarea>
+              <div id="modelSqlVersionList" class="history-list soft-history"></div>
+            </div>
+          </div>
           <div class="model-tab" id="model-tab-deps"><div class="dependency-map" id="modelDependencies"></div></div>
           <div class="model-tab" id="model-tab-runs"><div class="run-list" id="modelRunList"></div></div>
           <div class="model-tab" id="model-tab-steps"><div class="step-list" id="modelStepList"></div></div>
@@ -1012,7 +1044,7 @@
     <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 16H3V4h12v1"/></symbol>
   </svg>
   <datalist id="entityRelationOptions"></datalist>
-  <script src="app.js?v=1.9.32"></script>
+  <script src="app.js?v=1.9.33"></script>
 </body>
 </html>
 

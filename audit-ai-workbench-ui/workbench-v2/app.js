@@ -2930,6 +2930,7 @@ async function selectModel(model) {
   }
   renderModelSteps(model);
   renderModelVersions(model);
+  renderModelSqlPanel(model);
   try { renderModelRuns(await apiRequest(`/api/models/${model.id}/runs`)); }
   catch (error) { showToast(error.message); }
   $$('#ledgerModelList .soft-ledger-model-card').forEach(card => {
@@ -2938,6 +2939,62 @@ async function selectModel(model) {
   if (state.ledgerDetail?.relations) {
     const relation = state.ledgerDetail.relations.find(item => item.entity_type === 'model' && item.entity_id === model.id);
     state.ledgerModelRelationId = relation?.id || null;
+  }
+}
+
+function bumpModelSqlVersionLabel(current = 'v1.0') {
+  const match = String(current || 'v1.0').match(/^(.*?)(\d+)(\D*)$/);
+  if (!match) return 'v1.1';
+  const next = String(Number(match[2]) + 1);
+  return `${match[1]}${next.padStart(match[2].length, '0')}${match[3]}`;
+}
+
+function syncModelSqlVersionHint(version) {
+  const label = version || $('#modelSqlVersion')?.value?.trim() || 'v1.0';
+  if ($('#modelSqlVersionHint')) $('#modelSqlVersionHint').textContent = `当前 ${label}`;
+  if ($('#modelDetailSqlHint')) $('#modelDetailSqlHint').textContent = `当前 ${label}`;
+}
+
+function renderModelSqlPanel(model) {
+  const versions = model.sql_versions || [];
+  const current = model.sql_current_version || 'v1.0';
+  const select = $('#modelSqlVersionSelect');
+  const textarea = $('#modelDetailSqlText');
+  const list = $('#modelSqlVersionList');
+  const restoreBtn = $('#restoreModelSqlVersionButton');
+  if (textarea) textarea.value = model.sql_text || '';
+  syncModelSqlVersionHint(current);
+  if (select) {
+    select.replaceChildren();
+    const options = versions.length ? versions : [{ id: '', version: current, sql_text: model.sql_text || '' }];
+    options.forEach(version => {
+      const option = document.createElement('option');
+      option.value = version.id || '';
+      option.textContent = `${version.version}${version.version === current ? ' · 当前' : ''}`;
+      option.dataset.sqlText = version.sql_text || '';
+      option.dataset.version = version.version || '';
+      select.append(option);
+    });
+    const currentOption = [...select.options].find(item => item.dataset.version === current);
+    if (currentOption) select.value = currentOption.value;
+    if (restoreBtn) restoreBtn.hidden = !select.value || (select.selectedOptions[0]?.dataset.version === current);
+  }
+  if (list) {
+    list.replaceChildren();
+    if (!versions.length) {
+      list.append(make('p', 'empty-state', '暂无 SQL 版本历史。填写 SQL 后可另存版本。'));
+    } else {
+      versions.forEach(version => {
+        const row = make('div');
+        const copy = make('span');
+        copy.append(
+          make('strong', '', `${version.version}${version.version === current ? ' · 当前' : ''}`),
+          make('small', '', `${formatDate(version.created_at)} · ${version.change_summary || '无说明'}`),
+        );
+        row.append(copy);
+        list.append(row);
+      });
+    }
   }
 }
 
@@ -2979,6 +3036,10 @@ function openModelForm(model = null) {
   $('#modelDependenciesInput').value = (model?.dependency_ids || []).join(', ');
   $('#modelRules').value = (model?.rule_definitions || []).map(rule => `${rule.name || rule.id || ''} | ${rule.description || ''}`).join('\n');
   $('#modelSteps').value = (model?.update_steps || []).map(step => `${step.title} | ${step.description || ''} | ${step.done ? '完成' : '未完成'}`).join('\n');
+  const sqlVersion = model?.sql_current_version || 'v1.0';
+  if ($('#modelSqlVersion')) $('#modelSqlVersion').value = sqlVersion;
+  if ($('#modelSqlText')) $('#modelSqlText').value = model?.sql_text || '';
+  syncModelSqlVersionHint(sqlVersion);
   $('#modelChangeSummary').value = ''; openModal($('#modelModal'));
 }
 
@@ -3069,6 +3130,8 @@ $('#modelForm').addEventListener('submit', async event => {
     schedule: $('#modelSchedule').value.trim(), current_version: $('#modelVersion').value.trim() || 'v1.0',
     rule_definitions: parseModelLines($('#modelRules').value, 'rule'), dependency_ids: splitValues($('#modelDependenciesInput').value),
     related_sql_ids: splitValues($('#modelSqlIds').value), update_steps: parseModelLines($('#modelSteps').value, 'step'),
+    sql_text: $('#modelSqlText')?.value || '',
+    sql_current_version: $('#modelSqlVersion')?.value.trim() || 'v1.0',
     change_summary: $('#modelChangeSummary').value.trim() || (id ? '更新模型配置' : '创建监测模型'),
   };
   try {
@@ -3085,6 +3148,86 @@ $('#modelForm').addEventListener('submit', async event => {
       await selectModel(saved);
     }
     showToast(id ? '监测模型已更新' : '监测模型已创建并绑定');
+  } catch (error) { showToast(error.message); }
+});
+
+$('#modelSqlVersion')?.addEventListener('input', () => syncModelSqlVersionHint($('#modelSqlVersion').value.trim()));
+
+$('#copyModelSql')?.addEventListener('click', async () => {
+  const text = $('#modelSqlText')?.value || '';
+  if (!text.trim()) { showToast('暂无 SQL 可复制'); return; }
+  try { await navigator.clipboard.writeText(text); showToast('SQL 已复制'); }
+  catch (_) { showToast('复制失败，请手动选择文本'); }
+});
+
+$('#loadRelatedSqlIntoModel')?.addEventListener('click', async () => {
+  const ids = splitValues($('#modelSqlIds')?.value || '');
+  if (!ids.length) { showToast('请先关联至少一个 SQL 资产'); return; }
+  const asset = (state.sqlAssets || []).find(item => item.id === ids[0])
+    || (state.apiAvailable ? await apiRequest(`/api/sql-assets/${ids[0]}`).catch(() => null) : null);
+  if (!asset?.sql_text) { showToast('关联资产暂无 SQL 文本'); return; }
+  if ($('#modelSqlText')) $('#modelSqlText').value = asset.sql_text;
+  if ($('#modelSqlVersion') && !$('#modelSqlVersion').value.trim()) {
+    $('#modelSqlVersion').value = asset.current_version || 'v1.0';
+    syncModelSqlVersionHint($('#modelSqlVersion').value);
+  }
+  showToast(`已载入 ${asset.id || ids[0]} 的 SQL`);
+});
+
+$('#copyModelDetailSql')?.addEventListener('click', async () => {
+  const text = $('#modelDetailSqlText')?.value || '';
+  if (!text.trim()) { showToast('暂无 SQL 可复制'); return; }
+  try { await navigator.clipboard.writeText(text); showToast('SQL 已复制'); }
+  catch (_) { showToast('复制失败，请手动选择文本'); }
+});
+
+$('#modelSqlVersionSelect')?.addEventListener('change', () => {
+  const option = $('#modelSqlVersionSelect')?.selectedOptions?.[0];
+  if (!option) return;
+  if ($('#modelDetailSqlText')) $('#modelDetailSqlText').value = option.dataset.sqlText || '';
+  const current = state.currentModel?.sql_current_version || 'v1.0';
+  if ($('#restoreModelSqlVersionButton')) {
+    $('#restoreModelSqlVersionButton').hidden = !option.value || option.dataset.version === current;
+  }
+});
+
+$('#saveModelSqlVersionButton')?.addEventListener('click', () => {
+  if (!state.currentModel) { showToast('请先选择模型'); return; }
+  const sqlText = $('#modelDetailSqlText')?.value || '';
+  if (!sqlText.trim()) { showToast('请先填写 SQL 代码'); return; }
+  $('#modelSqlVersionForm')?.reset();
+  $('#modelNewSqlVersion').value = bumpModelSqlVersionLabel(state.currentModel.sql_current_version || 'v1.0');
+  $('#modelSqlChangeSummary').value = '';
+  openModal($('#modelSqlVersionModal'));
+  setTimeout(() => $('#modelNewSqlVersion')?.focus(), 20);
+});
+
+$('#restoreModelSqlVersionButton')?.addEventListener('click', async () => {
+  if (!state.currentModel) return;
+  const versionId = $('#modelSqlVersionSelect')?.value;
+  if (!versionId) return;
+  try {
+    const updated = await apiRequest(`/api/models/${state.currentModel.id}/sql-versions/${versionId}/restore`, { method: 'POST' });
+    await selectModel(updated);
+    showToast(`已恢复 SQL 版本 ${updated.sql_current_version || ''}`);
+  } catch (error) { showToast(error.message); }
+});
+
+$('#modelSqlVersionForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!state.currentModel) return;
+  const version = $('#modelNewSqlVersion')?.value.trim();
+  const changeSummary = $('#modelSqlChangeSummary')?.value.trim() || '';
+  const sqlText = $('#modelDetailSqlText')?.value || '';
+  if (!version) { showToast('请填写版本号'); return; }
+  try {
+    await apiRequest(`/api/models/${state.currentModel.id}/sql-versions`, {
+      method: 'POST',
+      body: JSON.stringify({ version, sql_text: sqlText, change_summary: changeSummary }),
+    });
+    closeModal($('#modelSqlVersionModal'));
+    await selectModel({ id: state.currentModel.id });
+    showToast(`已保存 SQL 版本 ${version}`);
   } catch (error) { showToast(error.message); }
 });
 

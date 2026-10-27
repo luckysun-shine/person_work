@@ -165,6 +165,8 @@ CREATE TABLE IF NOT EXISTS monitoring_models (
     dependency_ids_json TEXT NOT NULL DEFAULT '[]',
     related_sql_ids_json TEXT NOT NULL DEFAULT '[]',
     update_steps_json TEXT NOT NULL DEFAULT '[]',
+    sql_text TEXT NOT NULL DEFAULT '',
+    sql_current_version TEXT NOT NULL DEFAULT 'v1.0',
     last_run_at TEXT,
     hit_count INTEGER NOT NULL DEFAULT 0,
     pending_review_count INTEGER NOT NULL DEFAULT 0,
@@ -176,6 +178,17 @@ CREATE TABLE IF NOT EXISTS model_versions (
     id TEXT PRIMARY KEY,
     model_id TEXT NOT NULL,
     version TEXT NOT NULL,
+    change_summary TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (model_id) REFERENCES monitoring_models(id) ON DELETE CASCADE,
+    UNIQUE (model_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS model_sql_versions (
+    id TEXT PRIMARY KEY,
+    model_id TEXT NOT NULL,
+    version TEXT NOT NULL,
+    sql_text TEXT NOT NULL DEFAULT '',
     change_summary TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     FOREIGN KEY (model_id) REFERENCES monitoring_models(id) ON DELETE CASCADE,
@@ -454,6 +467,7 @@ CREATE INDEX IF NOT EXISTS idx_sql_assets_updated_at ON sql_assets(updated_at DE
 CREATE INDEX IF NOT EXISTS idx_sql_versions_asset ON sql_versions(sql_asset_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_model_runs_model ON model_runs(model_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_model_versions_model ON model_versions(model_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_model_sql_versions_model ON model_sql_versions(model_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_navigation_category ON navigation_items(category, sort_order);
 CREATE INDEX IF NOT EXISTS idx_procedure_versions ON procedure_versions(procedure_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_procedure_deployments ON procedure_deployments(procedure_id, created_at DESC);
@@ -518,6 +532,20 @@ def init_db(db_path: Path | None = None) -> None:
     with transaction(db_path) as connection:
         connection.executescript(SCHEMA)
         ensure_column(connection, "monitoring_models", "update_steps_json", "TEXT NOT NULL DEFAULT '[]'")
+        ensure_column(connection, "monitoring_models", "sql_text", "TEXT NOT NULL DEFAULT ''")
+        ensure_column(connection, "monitoring_models", "sql_current_version", "TEXT NOT NULL DEFAULT 'v1.0'")
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS model_sql_versions (
+                id TEXT PRIMARY KEY,
+                model_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                sql_text TEXT NOT NULL DEFAULT '',
+                change_summary TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (model_id) REFERENCES monitoring_models(id) ON DELETE CASCADE,
+                UNIQUE (model_id, version)
+            )"""
+        )
         ensure_column(connection, "weekly_reports", "status", "TEXT NOT NULL DEFAULT 'draft'")
         ensure_column(connection, "report_templates", "cover_json", "TEXT NOT NULL DEFAULT '{}'")
         for column, definition in (
@@ -831,6 +859,36 @@ def seed_database(connection: sqlite3.Connection) -> None:
         connection.executemany(
             "INSERT INTO model_versions (id,model_id,version,change_summary,created_at) VALUES (?,?,?,?,?)",
             [(new_id("MV"), model["id"], model["current_version"], "当前模型版本", now) for model in models],
+        )
+
+    # Backfill model SQL text from first related SQL asset when empty.
+    for model in connection.execute(
+        "SELECT id, related_sql_ids_json, sql_text, sql_current_version, current_version FROM monitoring_models"
+    ).fetchall():
+        if (model["sql_text"] or "").strip():
+            continue
+        try:
+            related_ids = json.loads(model["related_sql_ids_json"] or "[]")
+        except Exception:
+            related_ids = []
+        if not related_ids:
+            continue
+        asset = connection.execute(
+            "SELECT sql_text, current_version FROM sql_assets WHERE id = ?",
+            (related_ids[0],),
+        ).fetchone()
+        if not asset or not (asset["sql_text"] or "").strip():
+            continue
+        version = model["sql_current_version"] or model["current_version"] or asset["current_version"] or "v1.0"
+        connection.execute(
+            "UPDATE monitoring_models SET sql_text = ?, sql_current_version = ? WHERE id = ?",
+            (asset["sql_text"], version, model["id"]),
+        )
+        connection.execute(
+            """INSERT OR IGNORE INTO model_sql_versions
+            (id,model_id,version,sql_text,change_summary,created_at)
+            VALUES (?,?,?,?,?,?)""",
+            (new_id("MSV"), model["id"], version, asset["sql_text"], "从关联 SQL 资产导入", now),
         )
 
     if connection.execute("SELECT COUNT(*) FROM navigation_items").fetchone()[0] == 0:
