@@ -56,9 +56,6 @@ const state = {
   calendarEvents: [],
   weekCalendarEvents: [],
   projectTemplates: [],
-  stats: null,
-  statsPeriod: 'week',
-  statsDrill: 'completed',
   notePreviewMode: false,
   homeLayout: ['tasks', 'projects', 'requests', 'quick'],
 };
@@ -338,7 +335,6 @@ function showView(name) {
   syncMobileTabbar(name);
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (name === 'data' && state.apiAvailable) { refreshBackups(); loadSettings(); maybeAutoBackup(); }
-  if (name === 'stats' && state.apiAvailable) refreshStats();
   if (name === 'search') { refreshSearchHelpers(); setTimeout(() => $('#globalSearchInput').focus(), 20); }
   if (redirectedFromModels || name === 'projects') renderProjects();
 }
@@ -4463,82 +4459,6 @@ async function maybeAutoBackup() {
     }
   } catch (_) {}
 }
-
-async function refreshStats() {
-  if (!state.apiAvailable) return;
-  try {
-    state.stats = await apiRequest(`/api/stats?period=${state.statsPeriod || 'week'}`);
-    renderStats();
-  } catch (error) { showToast(error.message); }
-}
-
-function renderStats() {
-  const stats = state.stats;
-  if (!stats) return;
-  $('#statsCompleted').textContent = stats.tasks.completed;
-  $('#statsOverdue').textContent = stats.tasks.overdue;
-  $('#statsCreated').textContent = stats.tasks.created;
-  $('#statsMinutes').textContent = stats.tasks.minutes_total;
-  $('#statsOnTime').textContent = stats.requests.on_time_rate == null
-    ? '—'
-    : `${Math.round(stats.requests.on_time_rate * 100)}%（${stats.requests.delivered}/${stats.requests.total}）`;
-  const typeList = $('#statsTypeList'); typeList.replaceChildren();
-  (stats.tasks.by_type || []).forEach(item => {
-    const row = make('div');
-    const copy = make('span');
-    copy.append(make('strong', '', item.type), make('small', '', `${item.count} 项 · ${item.minutes} 分钟`));
-    row.append(copy); typeList.append(row);
-  });
-  if (!(stats.tasks.by_type || []).length) typeList.append(make('p', 'empty-state', '本周期暂无完成任务耗时'));
-  const themeList = $('#statsThemeList'); themeList.replaceChildren();
-  (stats.requests.top_themes || []).forEach(item => {
-    const row = make('div');
-    const copy = make('span');
-    copy.append(make('strong', '', item.theme), make('small', '', `${item.count} 次`));
-    row.append(copy); themeList.append(row);
-  });
-  if (!(stats.requests.top_themes || []).length) themeList.append(make('p', 'empty-state', '本周期暂无数据请求'));
-  renderStatsDrill();
-}
-
-function renderStatsDrill() {
-  const stats = state.stats; if (!stats) return;
-  const drill = state.statsDrill || 'completed';
-  const list = $('#statsDrillList'); list.replaceChildren();
-  const labels = { completed: '已完成任务', overdue: '逾期任务', created: '新增任务', requests: '数据请求' };
-  if ($('#statsDrillHint')) $('#statsDrillHint').textContent = `${stats.period.start} ~ ${stats.period.end} · ${labels[drill] || ''}`;
-  let items = [];
-  if (drill === 'requests') items = stats.requests.items || [];
-  else items = (stats.tasks.drilldown || {})[drill] || [];
-  items.forEach(item => {
-    const row = make('button'); row.type = 'button';
-    const copy = make('span');
-    copy.append(
-      make('strong', '', item.title),
-      make('small', '', drill === 'requests'
-        ? `${item.id} · ${item.status}${item.requester ? ` · ${item.requester}` : ''}`
-        : `${item.id || ''} · ${item.planned_date || '未排期'}${item.actual_minutes ? ` · ${item.actual_minutes} 分钟` : ''}${item.completion_result ? ` · ${item.completion_result}` : ''}`),
-    );
-    row.append(copy);
-    row.addEventListener('click', () => {
-      if (drill === 'requests') openEntityDrawer('data_request', item);
-      else openEntityDrawer('task', item);
-    });
-    list.append(row);
-  });
-  if (!items.length) list.append(make('p', 'empty-state', '该类别暂无明细'));
-}
-
-$$('#statsPeriodTabs button').forEach(button => button.addEventListener('click', async () => {
-  state.statsPeriod = button.dataset.period;
-  $$('#statsPeriodTabs button').forEach(item => item.classList.toggle('active', item === button));
-  await refreshStats();
-}));
-$$('#statsDrillTabs button').forEach(button => button.addEventListener('click', () => {
-  state.statsDrill = button.dataset.drill;
-  $$('#statsDrillTabs button').forEach(item => item.classList.toggle('active', item === button));
-  renderStatsDrill();
-}));
 
 function renderTodayQuickLinks() {
   const container = $('#todayQuickLinks') || $('.quick-links');

@@ -2402,14 +2402,6 @@ body.theme-soft-welcome .unified-result.selected {
   transform: translateY(-1px);
 }
 
-/* ——— 统计复盘 ——— */
-body.theme-soft-welcome .soft-stats-grid {
-  gap: 16px;
-}
-body.theme-soft-welcome .soft-panel-span {
-  grid-column: 1 / -1;
-}
-
 /* ——— 监测模型 ——— */
 body.theme-soft-welcome .soft-model-overview {
   margin-bottom: 16px;
@@ -3008,15 +3000,6 @@ body.theme-soft-welcome .soft-nav-sections .recent-links button:hover {
   background: #FFF8DF;
 }
 
-@media (max-width: 1100px) {
-  body.theme-soft-welcome .soft-stats-grid {
-    grid-template-columns: 1fr;
-  }
-  body.theme-soft-welcome .soft-panel-span {
-    grid-column: auto;
-  }
-}
-
 /* ========== Mobile / phone browser shell ========== */
 body.theme-soft-welcome .nav-backdrop {
   display: none;
@@ -3219,7 +3202,6 @@ body.theme-soft-welcome .mobile-tabbar {
   body.theme-soft-welcome .home-board,
   body.theme-soft-welcome .dashboard-grid,
   body.theme-soft-welcome .today-board,
-  body.theme-soft-welcome .soft-stats-grid,
   body.theme-soft-welcome .data-management-grid,
   body.theme-soft-welcome .model-grid,
   body.theme-soft-welcome .soft-ledger-grid,

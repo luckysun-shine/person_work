@@ -13,7 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='10' fill='%231C1C1C'/%3E%3Cpath d='M18 6.5 27.5 10.2v7.2c0 6.1-4 10.6-9.5 12.4-5.5-1.8-9.5-6.3-9.5-12.4v-7.2L18 6.5Z' fill='none' stroke='%23F5C84B' stroke-width='1.9' stroke-linejoin='round'/%3E%3Cpath d='M13.5 20.5v-4m4.5 4v-7m4.5 7v-2.5' stroke='%23FFF1C2' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='22.5' cy='13.5' r='1.7' fill='%23F5C84B'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css?v=1.0.0">
   <link rel="stylesheet" href="ui-apple-hig.css?v=1.9.17">
-  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.27">
+  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.28">
 </head>
 <body class="theme-soft-welcome">
   <div class="app-shell">
@@ -35,8 +35,6 @@
         <p class="nav-label">工作</p>
         <button class="nav-item active" data-view="today"><svg><use href="#i-home"/></svg><span>今日</span><b id="navTodayCount">0</b></button>
         <button class="nav-item" data-view="week"><svg><use href="#i-calendar"/></svg><span>本周计划</span></button>
-        <button class="nav-item" data-view="stats"><svg><use href="#i-chart"/></svg><span>统计复盘</span></button>
-
         <p class="nav-label">资产</p>
         <button class="nav-item" data-view="requests"><svg><use href="#i-inbox"/></svg><span>数据请求</span><b id="navRequestCount" hidden>0</b></button>
         <button class="nav-item" data-view="sql"><svg><use href="#i-code"/></svg><span>SQL 资产</span></button>
@@ -302,16 +300,6 @@
               <button class="primary-button" type="submit">保存复盘</button>
             </footer>
           </form>
-        </section>
-
-        <section class="view" id="view-stats" data-title="统计复盘">
-          <div class="page-head soft-page-head"><div><p class="eyebrow">STATS</p><h1>统计复盘</h1><p>查看完成、延期、新增任务投入，以及数据请求交付情况；支持下钻到具体条目。</p></div><div class="segmented soft-segmented" id="statsPeriodTabs"><button class="active" data-period="week">本周</button><button data-period="month">本月</button><button data-period="quarter">本季</button></div></div>
-          <div class="summary-line soft-summary" id="statsSummary"><div><strong id="statsCompleted">0</strong><span>已完成任务</span></div><div><strong id="statsOverdue">0</strong><span>逾期未完成</span></div><div><strong id="statsCreated">0</strong><span>期间新增</span></div><div><strong id="statsMinutes">0</strong><span>投入分钟</span></div><p>请求按时交付率 <strong id="statsOnTime">—</strong></p></div>
-          <div class="dashboard-grid soft-stats-grid">
-            <section class="panel soft-panel-card"><div class="panel-head"><div><h2>任务类型投入</h2><p>基于完成任务的实际耗时</p></div></div><div id="statsTypeList" class="history-list soft-history"><p class="empty-state">暂无数据</p></div></section>
-            <section class="panel soft-panel-card"><div class="panel-head"><div><h2>常见需求主题</h2><p>按用途/主题汇总</p></div></div><div id="statsThemeList" class="history-list soft-history"><p class="empty-state">暂无数据</p></div></section>
-            <section class="panel soft-panel-card soft-panel-span"><div class="panel-head"><div><h2>可下钻列表</h2><p id="statsDrillHint">选择类别查看明细</p></div><div class="segmented soft-segmented" id="statsDrillTabs"><button class="active" data-drill="completed">已完成</button><button data-drill="overdue">逾期</button><button data-drill="created">新增</button><button data-drill="requests">请求</button></div></div><div id="statsDrillList" class="history-list soft-history"><p class="empty-state">加载后显示明细</p></div></section>
-          </div>
         </section>
 
         <section class="view" id="view-requests" data-title="数据请求">
@@ -1042,7 +1030,7 @@
     <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 16H3V4h12v1"/></symbol>
   </svg>
   <datalist id="entityRelationOptions"></datalist>
-  <script src="app.js?v=1.9.37"></script>
+  <script src="app.js?v=1.9.38"></script>
 </body>
 </html>
 
