@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#F7F3E8">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -75,8 +75,6 @@
             <i class="ai-status-dot" aria-hidden="true"></i>
             <span id="aiStatusChipLabel">AI 未配置</span>
           </button>
-          <button class="icon-button appearance-button" id="appearanceButton" aria-label="切换外观" title="切换浅色或深色外观">◐</button>
-          <button class="avatar-button" aria-label="个人设置">分</button>
           <button class="primary-button" id="quickCreate"><svg><use href="#i-plus"/></svg>快速记录</button>
         </div>
       </header>
@@ -318,7 +316,7 @@
 
         <section class="view" id="view-requests" data-title="数据请求">
           <div class="page-head soft-page-head"><div><p class="eyebrow">REQUEST ARCHIVE</p><h1>数据请求</h1><p>独立存档同事日常取数需求：主题、口径与 SQL 版本。</p></div><button class="primary-button" id="newRequestButton"><svg><use href="#i-plus"/></svg>新建请求</button></div>
-          <div class="summary-line soft-summary"><div><strong>0</strong><span>全部请求</span></div><div><strong>0</strong><span>处理中</span></div><div><strong>0</strong><span>等待确认</span></div><div><strong>0</strong><span>本月已交付</span></div><p>平均交付用时 <strong id="requestAverageDays">—</strong></p></div>
+          <div class="summary-line soft-summary"><div><strong>0</strong><span>全部请求</span></div><div><strong>0</strong><span>处理中</span></div><div><strong>0</strong><span>本月已交付</span></div><p>平均交付用时 <strong id="requestAverageDays">—</strong></p></div>
           <div class="list-toolbar request-filter-bar soft-list-toolbar"><div class="filter-tabs" id="requestStatusFilters"><button class="active" data-status="all">全部</button><button data-status="pending">待处理</button><button data-status="waiting">待确认</button><button data-status="working">处理中</button><button data-status="done">已交付</button></div><div class="batch-actions"><button class="secondary-button" id="requestBatchDone" disabled>批量完成</button><button class="secondary-button danger-button" id="requestBatchDelete" disabled>删除所选</button><div class="inline-search"><svg><use href="#i-search"/></svg><input id="requestSearch" placeholder="搜索主题、用途或编号"></div></div></div>
           <div class="form-grid request-advanced-filters soft-advanced-filters"><label>需求人<input id="requestFilterRequester" placeholder="姓名"></label><label>部门<input id="requestFilterDepartment" placeholder="部门"></label><label>开始日期<input id="requestFilterFrom" type="date"></label><label>结束日期<input id="requestFilterTo" type="date"></label><div class="batch-actions"><button class="secondary-button" id="requestFilterApply" type="button">组合筛选</button><button class="text-button" id="requestFilterReset" type="button">重置</button></div></div>
           <div class="data-list request-list soft-data-list">
@@ -1044,7 +1042,7 @@
     <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 16H3V4h12v1"/></symbol>
   </svg>
   <datalist id="entityRelationOptions"></datalist>
-  <script src="app.js?v=1.9.36"></script>
+  <script src="app.js?v=1.9.37"></script>
 </body>
 </html>
 

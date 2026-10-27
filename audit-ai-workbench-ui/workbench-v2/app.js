@@ -2509,13 +2509,12 @@ function renderRequests() {
     rows.append(row);
   });
   const metrics = $$('.summary-line > div strong', $('#view-requests'));
-  if (metrics.length >= 4) {
+  if (metrics.length >= 3) {
     metrics[0].textContent = state.requests.length;
     metrics[1].textContent = state.requests.filter(item => item.status === 'working').length;
-    metrics[2].textContent = state.requests.filter(item => item.status === 'waiting').length;
     const month = new Date().toISOString().slice(0, 7);
     const delivered = state.requests.filter(item => item.status === 'done' && String(item.updated_at || '').startsWith(month));
-    metrics[3].textContent = delivered.length;
+    metrics[2].textContent = delivered.length;
     const durations = delivered.map(item => Math.max(0, (new Date(item.updated_at) - new Date(item.created_at)) / 86400000)).filter(Number.isFinite);
     $('#requestAverageDays').textContent = durations.length ? `${(durations.reduce((sum, value) => sum + value, 0) / durations.length).toFixed(1)} 天` : '—';
   }
@@ -4912,13 +4911,6 @@ window.addEventListener('resize', () => {
   if (!isMobileShell()) closeMobileNav();
 });
 
-function applyAppearance(mode) {
-  const dark = mode === 'dark';
-  document.documentElement.classList.toggle('dark', dark);
-  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
-  $('#appearanceButton').setAttribute('aria-pressed', String(dark));
-}
-
 function navigationCategorySuggestions() {
   const defaults = ['常用工具', '数据平台', '审计系统', '协作沟通', '知识文档'];
   const existing = [...new Set((state.navigation || []).map(item => item.category).filter(Boolean))];
@@ -5104,13 +5096,10 @@ $('#deleteNavigationButton').addEventListener('click', async () => {
   } catch (error) { showToast(error.message); }
 });
 
-const savedAppearance = localStorage.getItem('audit-workbench.appearance');
-applyAppearance(savedAppearance || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
-$('#appearanceButton').addEventListener('click', () => {
-  const mode = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
-  localStorage.setItem('audit-workbench.appearance', mode);
-  applyAppearance(mode);
-});
+// 工作台固定使用浅色外观；清理历史版本留下的深色偏好。
+document.documentElement.classList.remove('dark');
+document.documentElement.style.colorScheme = 'light';
+localStorage.removeItem('audit-workbench.appearance');
 $('#aiStatusChip')?.addEventListener('click', () => openAiSettings());
 $('#aiCapabilityConfig')?.addEventListener('click', event => {
   event.preventDefault();
