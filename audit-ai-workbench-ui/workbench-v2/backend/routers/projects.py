@@ -89,29 +89,57 @@ def _linked_models_for_project(project_id: str) -> list[dict]:
     )
 
 
+def _model_attention_count(models: list[dict]) -> int:
+    return sum(
+        1
+        for model in models
+        if model.get("status") == "update_due" or int(model.get("pending_review_count") or 0) > 0
+    )
+
+
 def _attach_ledger_summary(items: list[dict]) -> list[dict]:
+    if not items:
+        return items
+    ids = [item["id"] for item in items]
+    placeholders = ",".join("?" for _ in ids)
+    latest_rows = C.fetch_all(
+        f"""SELECT project_id, executed_at, result, summary FROM (
+            SELECT project_id, executed_at, result, summary,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY project_id ORDER BY executed_at DESC, created_at DESC
+                   ) AS rn
+            FROM project_executions WHERE project_id IN ({placeholders})
+        ) WHERE rn = 1""",
+        tuple(ids),
+    )
+    latest_map = {row.pop("project_id"): row for row in latest_rows}
+    pending_rows = C.fetch_all(
+        f"""SELECT project_id, COUNT(*) AS c FROM project_update_steps
+        WHERE project_id IN ({placeholders}) AND status != 'done'
+        GROUP BY project_id""",
+        tuple(ids),
+    )
+    pending_map = {row["project_id"]: int(row["c"] or 0) for row in pending_rows}
+    model_rows = C.fetch_all(
+        f"""SELECT r.project_id, m.id, m.name, m.status, m.current_version, m.schedule,
+                  m.last_run_at, m.hit_count, m.pending_review_count, m.purpose
+        FROM project_relations r
+        INNER JOIN monitoring_models m ON m.id = r.entity_id
+        WHERE r.entity_type = 'model' AND r.project_id IN ({placeholders})
+        ORDER BY m.updated_at DESC""",
+        tuple(ids),
+    )
+    models_map: dict[str, list[dict]] = {}
+    for row in model_rows:
+        models_map.setdefault(row.pop("project_id"), []).append(row)
     for item in items:
-        latest = C.fetch_one(
-            """SELECT executed_at, result, summary FROM project_executions
-            WHERE project_id = ? ORDER BY executed_at DESC, created_at DESC LIMIT 1""",
-            (item["id"],),
-        )
-        pending_steps = C.fetch_one(
-            """SELECT COUNT(*) AS c FROM project_update_steps
-            WHERE project_id = ? AND status != 'done'""",
-            (item["id"],),
-        )
-        models = _linked_models_for_project(item["id"])
-        item["latest_execution"] = latest
-        item["pending_steps"] = int((pending_steps or {}).get("c") or 0)
+        models = models_map.get(item["id"], [])
+        item["latest_execution"] = latest_map.get(item["id"])
+        item["pending_steps"] = pending_map.get(item["id"], 0)
         item["relation_count"] = int(item.get("relation_count") or 0)
         item["linked_models"] = models
         item["model_count"] = len(models)
-        item["model_attention"] = sum(
-            1
-            for model in models
-            if model.get("status") == "update_due" or int(model.get("pending_review_count") or 0) > 0
-        )
+        item["model_attention"] = _model_attention_count(models)
     return items
 
 
@@ -129,9 +157,12 @@ def list_projects(
         clauses.append("p.category = ?")
         params.append(category)
     if q:
-        clauses.append("(p.name LIKE ? OR p.goal LIKE ? OR p.plan_detail LIKE ? OR p.monitor_logic LIKE ?)")
+        clauses.append(
+            "(p.name LIKE ? OR p.goal LIKE ? OR p.plan_detail LIKE ? OR p.monitor_logic LIKE ? "
+            "OR p.next_action LIKE ? OR p.category LIKE ?)"
+        )
         keyword = f"%{q}%"
-        params.extend([keyword, keyword, keyword, keyword])
+        params.extend([keyword] * 6)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     items = C.fetch_all(
         f"""SELECT p.*, COUNT(r.id) AS relation_count
@@ -291,11 +322,7 @@ def get_project(project_id: str) -> dict:
     project["latest_execution"] = executions[0] if executions else None
     project["linked_models"] = linked_models
     project["model_count"] = len(linked_models)
-    project["model_attention"] = sum(
-        1
-        for model in linked_models
-        if model.get("status") == "update_due" or int(model.get("pending_review_count") or 0) > 0
-    )
+    project["model_attention"] = _model_attention_count(linked_models)
     return {
         "project": project,
         "relations": relations,

@@ -13,7 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='10' fill='%231C1C1C'/%3E%3Cpath d='M18 6.5 27.5 10.2v7.2c0 6.1-4 10.6-9.5 12.4-5.5-1.8-9.5-6.3-9.5-12.4v-7.2L18 6.5Z' fill='none' stroke='%23F5C84B' stroke-width='1.9' stroke-linejoin='round'/%3E%3Cpath d='M13.5 20.5v-4m4.5 4v-7m4.5 7v-2.5' stroke='%23FFF1C2' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='22.5' cy='13.5' r='1.7' fill='%23F5C84B'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css?v=1.0.0">
   <link rel="stylesheet" href="ui-apple-hig.css?v=1.9.17">
-  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.23">
+  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.26">
 </head>
 <body class="theme-soft-welcome">
   <div class="app-shell">
@@ -372,7 +372,7 @@
             <div><strong id="ledgerActiveCount">0</strong><span>进行中</span></div>
             <div><strong id="ledgerModelCount">0</strong><span>绑定模型</span></div>
             <div><strong id="ledgerAttentionCount">0</strong><span>待关注</span></div>
-            <p>待办步骤 <strong id="ledgerPendingSteps">0</strong></p>
+            <div><strong id="ledgerPendingSteps">0</strong><span>待办步骤</span></div>
           </div>
           <div class="list-toolbar soft-list-toolbar soft-ledger-toolbar">
             <div class="filter-tabs" id="ledgerCategoryFilters">
@@ -835,7 +835,6 @@
               <option value="经销商监管类">经销商监管类</option>
               <option value="合作商监管类">合作商监管类</option>
               <option value="AI助力管理类">AI助力管理类</option>
-              <option value="其他">其他</option>
             </select>
           </label>
           <label>状态
@@ -908,7 +907,8 @@
             <h3>绑定监测模型</h3>
             <p class="form-hint">模型作为本监管项的运行规则子资源：规则、命中运行与版本都在这里维护。</p>
           </div>
-          <div class="batch-actions">
+          <div class="batch-actions soft-ledger-bind-actions">
+            <select id="bindModelSelect" aria-label="选择要绑定的已有模型"></select>
             <button type="button" class="secondary-button" id="bindExistingModelButton">绑定已有模型</button>
             <button type="button" class="primary-button" id="newModelButton"><svg><use href="#i-plus"/></svg>新建并绑定</button>
           </div>
@@ -1044,7 +1044,7 @@
     <symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 8h12v12H8zM4 16H3V4h12v1"/></symbol>
   </svg>
   <datalist id="entityRelationOptions"></datalist>
-  <script src="app.js?v=1.9.34"></script>
+  <script src="app.js?v=1.9.35"></script>
 </body>
 </html>
 

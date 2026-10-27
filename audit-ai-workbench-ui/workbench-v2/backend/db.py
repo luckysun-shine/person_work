@@ -952,7 +952,12 @@ def seed_database(connection: sqlite3.Connection) -> None:
             [(*item, now, now) for item in templates],
         )
 
-    if connection.execute("SELECT COUNT(*) FROM project_relations").fetchone()[0] == 0:
+    # 模型↔台账的绑定会先于此处写入，因此只检查 SQL/任务类关系是否已种子化，
+    # 否则 project_relations 非空会导致这批关系永远不会补齐。
+    legacy_relation_count = connection.execute(
+        "SELECT COUNT(*) FROM project_relations WHERE entity_type IN ('sql_asset','task')"
+    ).fetchone()[0]
+    if legacy_relation_count == 0:
         relations: list[tuple] = []
         for asset in connection.execute(
             """SELECT s.id,s.related_project_id FROM sql_assets s

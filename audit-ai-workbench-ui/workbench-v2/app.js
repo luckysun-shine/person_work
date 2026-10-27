@@ -179,6 +179,9 @@ function closeTransientUi() {
   closeModal($('#procedureModal'));
   closeModal($('#taskModal'));
   closeModal($('#recordModal'));
+  closeModal($('#modelRunModal'));
+  closeModal($('#modelSqlVersionModal'));
+  closeModal($('#projectModal'));
   closeModal($('#projectRelationModal'));
   closeEntityDrawer();
   closeDrawer();
@@ -294,7 +297,7 @@ function updateNavCounts() {
   }
   const projectBadge = $('#navProjectCount');
   if (projectBadge) {
-    const attention = (state.projects || []).reduce((sum, item) => sum + (item.model_attention || 0) + (item.pending_steps || 0), 0);
+    const attention = (state.projects || []).filter(ledgerNeedsAttention).length;
     projectBadge.textContent = String(attention);
     projectBadge.hidden = attention <= 0;
     projectBadge.classList.toggle('risk', attention > 0);
@@ -546,11 +549,11 @@ function filteredLedgerProjects() {
   const q = (state.ledgerQuery || '').trim().toLowerCase();
   return (state.projects || []).filter(project => {
     if (state.ledgerCategory !== 'all' && project.category !== state.ledgerCategory) return false;
-    if (state.ledgerFocus === 'attention' && !(project.model_attention || project.pending_steps)) return false;
+    if (state.ledgerFocus === 'attention' && !ledgerNeedsAttention(project)) return false;
     if (state.ledgerFocus === 'with_model' && !(project.model_count > 0)) return false;
     if (!q) return true;
     const modelText = (project.linked_models || []).map(item => `${item.name || ''} ${item.id || ''}`).join(' ');
-    const hay = [project.name, project.goal, project.plan_detail, project.monitor_logic, project.next_action, modelText]
+    const hay = [project.id, project.name, project.category, project.goal, project.plan_detail, project.monitor_logic, project.next_action, modelText]
       .filter(Boolean).join(' ').toLowerCase();
     return hay.includes(q);
   });
@@ -1950,10 +1953,11 @@ $('#compareSqlVersionsButton')?.addEventListener('click', () => {
 });
 $('#runSqlDiffButton')?.addEventListener('click', runSqlDiff);
 
+const MODAL_BASE_Z = 80;
 function openModal(modal) {
   if (!modal) return;
   const openCount = $$('.modal.open').filter(item => item !== modal).length;
-  modal.style.zIndex = String(60 + openCount * 20);
+  modal.style.zIndex = String(MODAL_BASE_Z + openCount * 20);
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
@@ -1965,12 +1969,17 @@ function closeModal(modal) {
   modal.style.zIndex = '';
   const stillOpen = $$('.modal.open');
   stillOpen.forEach((item, index) => {
-    item.style.zIndex = String(60 + index * 20);
+    item.style.zIndex = String(MODAL_BASE_Z + index * 20);
   });
   if (!stillOpen.length) document.body.classList.remove('modal-open');
 }
 $$('.modal-close').forEach(button => button.addEventListener('click', () => closeModal(button.closest('.modal'))));
-$$('.modal').forEach(modal => modal.addEventListener('click', event => { if (event.target === modal) closeModal(modal); }));
+$$('.modal').forEach(modal => modal.addEventListener('click', event => {
+  if (event.target !== modal) return;
+  if (modal.id === 'projectRelationModal' && ledgerDetailHasUnsavedChanges()
+    && !window.confirm('台账详情中有尚未保存的修改，确认关闭吗？')) return;
+  closeModal(modal);
+}));
 
 function taskRelationType(type) {
   return ({ model: 'model', request: 'data_request', sql: 'sql_asset', report: 'project', note: 'project' })[type] || null;
@@ -2933,6 +2942,7 @@ async function selectModel(model) {
   renderModelSqlPanel(model);
   try { renderModelRuns(await apiRequest(`/api/models/${model.id}/runs`)); }
   catch (error) { showToast(error.message); }
+  state.ledgerModelLoadedFor = model.id;
   $$('#ledgerModelList .soft-ledger-model-card').forEach(card => {
     card.classList.toggle('active', card.dataset.modelId === model.id);
   });
@@ -3111,15 +3121,14 @@ $('#bindExistingModelButton')?.addEventListener('click', async () => {
   const linkedIds = new Set((state.ledgerDetail?.relations || []).filter(item => item.entity_type === 'model').map(item => item.entity_id));
   const candidates = (state.models || []).filter(model => !linkedIds.has(model.id));
   if (!candidates.length) { showToast('没有可绑定的未关联模型，可先新建'); return; }
-  const pick = window.prompt(`输入要绑定的模型编号：\n${candidates.map(item => `${item.id} ${item.name}`).join('\n')}`, candidates[0].id);
+  const pick = ($('#bindModelSelect')?.value || candidates[0].id).trim();
   if (!pick) return;
   try {
-    await bindModelToCurrentProject(pick.trim());
+    await bindModelToCurrentProject(pick);
     await refreshProjects();
-    await openProjectRelations(state.currentProject);
-    setLedgerDetailTab('models');
-    const model = state.models.find(item => item.id === pick.trim());
-    if (model) await selectModel(model);
+    const model = state.models.find(item => item.id === pick);
+    if (model) state.currentModel = model;
+    await openProjectRelations(state.currentProject, 'models');
     showToast('模型已绑定到监管项');
   } catch (error) { showToast(error.message); }
 });
@@ -3247,7 +3256,7 @@ function localDateTimeValue(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-$('#newModelRunButton').addEventListener('click', () => {
+$('#newModelRunButton')?.addEventListener('click', () => {
   if (!state.currentModel) return;
   $('#modelRunForm').reset(); $('#runModelId').value = state.currentModel.id;
   $('#runStartedAt').value = localDateTimeValue(); openModal($('#modelRunModal'));
@@ -3277,11 +3286,15 @@ async function refreshProjects() {
   renderTodayProjects();
 }
 
+function ledgerNeedsAttention(project) {
+  return Boolean((project.model_attention || 0) > 0 || (project.pending_steps || 0) > 0);
+}
+
 function renderLedgerOverview() {
   const all = state.projects || [];
   const active = all.filter(item => item.status === 'active').length;
   const modelBound = all.filter(item => (item.model_count || 0) > 0).length;
-  const attention = all.reduce((sum, item) => sum + (item.model_attention || 0), 0);
+  const attention = all.filter(ledgerNeedsAttention).length;
   const pending = all.reduce((sum, item) => sum + (item.pending_steps || 0), 0);
   if ($('#ledgerTotalCount')) $('#ledgerTotalCount').textContent = String(all.length);
   if ($('#ledgerActiveCount')) $('#ledgerActiveCount').textContent = String(active);
@@ -3392,6 +3405,40 @@ function setLedgerDetailTab(tab) {
   $$('#projectRelationModal [data-ledger-panel]').forEach(panel => {
     panel.hidden = panel.dataset.ledgerPanel !== state.ledgerDetailTab;
   });
+  if (state.ledgerDetailTab === 'exec' && $('#ledgerExecAt') && !$('#ledgerExecAt').value) {
+    $('#ledgerExecAt').value = localDateTimeValue();
+  }
+  if (state.ledgerDetailTab === 'models') ensureLedgerModelDetail();
+}
+
+function ensureLedgerModelDetail() {
+  const models = state.ledgerDetail?.models || state.currentProject?.linked_models || [];
+  if (!models.length) return;
+  const preferred = models.find(item => item.id === state.currentModel?.id) || models[0];
+  if (!preferred) return;
+  if (state.ledgerModelLoadedFor === preferred.id && $('#ledgerModelDetail') && !$('#ledgerModelDetail').hidden) return;
+  selectModel(preferred).catch(error => showToast(error.message));
+}
+
+function fillBindModelSelect() {
+  const select = $('#bindModelSelect');
+  if (!select) return;
+  const linkedIds = new Set((state.ledgerDetail?.relations || []).filter(item => item.entity_type === 'model').map(item => item.entity_id));
+  const candidates = (state.models || []).filter(model => !linkedIds.has(model.id));
+  select.replaceChildren();
+  if (!candidates.length) {
+    const option = make('option', '', '暂无可绑定的模型');
+    option.value = '';
+    select.append(option);
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  candidates.forEach(model => {
+    const option = make('option', '', `${model.name || model.id} · ${model.id}`);
+    option.value = model.id;
+    select.append(option);
+  });
 }
 
 async function renderLedgerModels(models = []) {
@@ -3420,25 +3467,38 @@ async function renderLedgerModels(models = []) {
     list.append(card);
   });
   const preferred = models.find(item => item.id === state.currentModel?.id) || models[0];
-  if (preferred) await selectModel(preferred);
-  else if (detail) detail.hidden = true;
+  if (!preferred) { if (detail) detail.hidden = true; return; }
+  // 仅在「监测模型」页签可见时才拉取模型详情与运行记录，其它页签切换到模型时再按需加载。
+  if (state.ledgerDetailTab === 'models') await selectModel(preferred);
+  else if (state.ledgerModelLoadedFor !== preferred.id && detail) detail.hidden = true;
 }
 
 async function openProjectRelations(project, preferredTab = null) {
+  const modal = $('#projectRelationModal');
+  const wasOpen = modal?.classList.contains('open') && state.currentProject?.id === project.id;
+  const scrollTop = wasOpen ? modal.scrollTop : 0;
+  if (!wasOpen) {
+    state.currentModel = null;
+    state.ledgerModelLoadedFor = null;
+  }
   try {
     const data = await apiRequest(`/api/projects/${project.id}`);
     state.currentProject = data.project;
     state.ledgerDetail = data;
     $('#relationProjectId').value = data.project.id;
     $('#projectRelationTitle').textContent = data.project.name;
+    if (preferredTab) state.ledgerDetailTab = preferredTab;
+    else if (!wasOpen) state.ledgerDetailTab = 'overview';
     renderProjectDetail(data);
     renderProjectRelations(data.relations || []);
     renderLedgerSteps(data.update_steps || []);
     renderLedgerExecutions(data.executions || []);
     await renderLedgerModels(data.models || data.project.linked_models || []);
+    fillBindModelSelect();
     fillRelationEntityPick($('#relationEntityType')?.value || 'sql_asset');
-    setLedgerDetailTab(preferredTab || state.ledgerDetailTab || 'overview');
-    openModal($('#projectRelationModal'));
+    setLedgerDetailTab(state.ledgerDetailTab || 'overview');
+    openModal(modal);
+    if (wasOpen) requestAnimationFrame(() => { modal.scrollTop = scrollTop; });
   } catch (error) { showToast(error.message); }
 }
 
@@ -3481,6 +3541,33 @@ function renderProjectDetail(data) {
   $('#projectMonitorLogic').value = project.monitor_logic || '';
   $('#projectCodeNote').value = project.code_note || '';
   $('#projectCodeBackup').value = project.code_backup || '';
+}
+
+const LEDGER_DETAIL_FIELDS = [
+  ['#projectName', 'name', ''],
+  ['#projectCategory', 'category', '员工监管类'],
+  ['#projectStatus', 'status', 'active'],
+  ['#projectCycle', 'monitor_cycle', '按需'],
+  ['#projectSortOrder', 'sort_order', 0],
+  ['#projectCycleNote', 'cycle_note', ''],
+  ['#projectNextAction', 'next_action', ''],
+  ['#projectGoal', 'goal', ''],
+  ['#projectPlanDetail', 'plan_detail', ''],
+  ['#projectMonitorLogic', 'monitor_logic', ''],
+  ['#projectCodeNote', 'code_note', ''],
+  ['#projectCodeBackup', 'code_backup', ''],
+];
+
+function ledgerDetailHasUnsavedChanges() {
+  const project = state.currentProject;
+  if (!project) return false;
+  return LEDGER_DETAIL_FIELDS.some(([selector, field, fallback]) => {
+    const input = $(selector);
+    if (!input) return false;
+    const current = String(input.value ?? '');
+    const saved = String(project[field] ?? fallback);
+    return current !== saved;
+  });
 }
 
 function renderLedgerSteps(steps) {
@@ -3749,7 +3836,7 @@ function renderProjectRelations(relations) {
     const row = make('div');
     const copy = make('span');
     copy.append(make('strong', '', relation.entity_label), make('small', '', `${relation.entity_id} · ${relation.note || relation.relation_type}`));
-    const remove = make('button', '', '移除'); remove.type = 'button';
+    const remove = make('button', 'text-button danger-text', '移除'); remove.type = 'button';
     remove.addEventListener('click', async event => {
       event.stopPropagation();
       if (!window.confirm(`确认移除与 ${relation.entity_id} 的关联吗？`)) return;
