@@ -1951,14 +1951,23 @@ $('#compareSqlVersionsButton')?.addEventListener('click', () => {
 $('#runSqlDiffButton')?.addEventListener('click', runSqlDiff);
 
 function openModal(modal) {
+  if (!modal) return;
+  const openCount = $$('.modal.open').filter(item => item !== modal).length;
+  modal.style.zIndex = String(60 + openCount * 20);
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
 }
 function closeModal(modal) {
+  if (!modal) return;
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
-  if (!$$('.modal.open').length) document.body.classList.remove('modal-open');
+  modal.style.zIndex = '';
+  const stillOpen = $$('.modal.open');
+  stillOpen.forEach((item, index) => {
+    item.style.zIndex = String(60 + index * 20);
+  });
+  if (!stillOpen.length) document.body.classList.remove('modal-open');
 }
 $$('.modal-close').forEach(button => button.addEventListener('click', () => closeModal(button.closest('.modal'))));
 $$('.modal').forEach(modal => modal.addEventListener('click', event => { if (event.target === modal) closeModal(modal); }));
