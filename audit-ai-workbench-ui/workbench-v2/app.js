@@ -4415,10 +4415,15 @@ function formatBytes(size) {
 }
 
 const RESTORE_TABLE_OPTIONS = [
-  ['tasks', '任务'], ['data_requests', '数据请求'], ['sql_assets', 'SQL 资产'], ['sql_versions', 'SQL 版本'],
-  ['stored_procedures', '存储过程'], ['monitoring_models', '监测模型'], ['projects', '项目'],
-  ['work_notes', '工作记录'], ['weekly_reports', '周报'], ['generated_reports', '模板报告'],
-  ['navigation_items', '常用导航'], ['saved_searches', '保存的检索'],
+  ['tasks', '任务'], ['data_requests', '数据请求'], ['data_request_sql_versions', '请求 SQL 版本'],
+  ['sql_assets', 'SQL 资产'], ['sql_versions', 'SQL 版本'],
+  ['stored_procedures', '存储过程'], ['procedure_versions', '存储过程版本'], ['procedure_deployments', '存储过程发布'],
+  ['monitoring_models', '监测模型'], ['model_versions', '模型版本'], ['model_sql_versions', '模型 SQL 版本'], ['model_runs', '模型运行'],
+  ['projects', '台账项目'], ['project_relations', '台账关联'], ['project_update_steps', '台账更新步骤'], ['project_executions', '台账执行记录'],
+  ['work_notes', '工作记录'], ['work_note_revisions', '记录修订'],
+  ['weekly_reports', '周报'], ['week_reviews', '周复盘'], ['report_templates', '报告模板'],
+  ['generated_reports', '模板报告'], ['report_versions', '报告版本'],
+  ['navigation_items', '常用导航'], ['saved_searches', '保存的检索'], ['project_templates', '项目模板'],
 ];
 
 function updateDataHealthSummary() {
@@ -4487,24 +4492,27 @@ async function importBackupFile(file) {
     const imported = await apiUpload('/api/backups/import', file);
     await refreshBackups();
     const counts = formatBackupCounts(imported.counts);
-    const preview = await apiRequest(`/api/backups/${encodeURIComponent(imported.name)}/merge-preview`, {
-      method: 'POST',
-      body: JSON.stringify({ mode: 'merge' }),
-    });
-    if (status) {
-      status.textContent = `已导入 ${imported.name}（${counts}）。与当前库对比：${mergeSummaryText(preview)}。`;
-    }
-    const mergeNow = await showConfirm({
-      title: '备份已导入',
-      message: `文件已加入备份列表（${counts}）。与当前库对比：${mergeSummaryText(preview)}。立即合并到当前库？访问密码和 AI 密钥不会被覆盖。也可以稍后点「合并同步」或「整库恢复」。`,
-      confirmText: '立即合并',
-      cancelText: '仅保存备份',
-    });
-    if (mergeNow) {
-      await mergeBackupIntoCurrent(imported.name, { skipConfirm: true });
+    if (!imported.has_content) {
+      const warning = imported.warning || '这份备份没有业务数据。请使用工作台「下载」的备份，不要直接复制正在运行的 workbench.db。';
+      if (status) status.textContent = warning;
+      showToast(warning);
       return;
     }
-    showToast('备份已导入，可稍后合并或整库恢复');
+    if (status) status.textContent = `已导入 ${imported.name}（${counts}）。导入的整库备份请用「整库恢复」，不要按表恢复。`;
+    const restoreNow = await showConfirm({
+      title: '备份已导入',
+      message: `已加入列表（${counts}）。导入的 .db 请整库恢复一次写回。按表恢复会漏掉台账步骤、执行记录和关联，看起来像内容被清空。也可以稍后点「合并同步」。`,
+      confirmText: '整库恢复',
+      cancelText: '仅保存备份',
+      danger: true,
+    });
+    if (restoreNow) {
+      await apiRequest(`/api/backups/${encodeURIComponent(imported.name)}/restore`, { method: 'POST' });
+      showToast('数据库已恢复，正在重新载入');
+      setTimeout(() => location.reload(), 700);
+      return;
+    }
+    showToast('备份已导入，可稍后整库恢复或合并同步');
   } catch (error) {
     if (status) status.textContent = error.message;
     showToast(error.message);
@@ -4567,15 +4575,30 @@ function renderBackups() {
   updateDataHealthSummary();
 }
 
-function openTableRestoreModal(backupName) {
+async function openTableRestoreModal(backupName) {
   $('#tableRestoreBackupName').value = backupName;
-  $('#tableRestoreHint').textContent = `将从 ${backupName} 按所选表写回当前数据库。恢复前会自动创建安全备份。`;
+  $('#tableRestoreHint').textContent = `将从 ${backupName} 按所选表写回。勾选父表会自动带上子表；备份里为空的表会跳过，避免把当前数据清掉。`;
   const box = $('#tableRestoreOptions'); box.replaceChildren();
+  let counts = {};
+  try {
+    const inspect = await apiRequest(`/api/backups/${encodeURIComponent(backupName)}/inspect`);
+    counts = inspect.counts || {};
+    if (!inspect.has_content) {
+      showToast('这份备份没有业务数据，按表恢复已禁用');
+      return;
+    }
+  } catch (error) {
+    showToast(error.message);
+    return;
+  }
   RESTORE_TABLE_OPTIONS.forEach(([value, label]) => {
-    const item = make('label', 'table-restore-option');
+    const count = Number(counts[value] || 0);
+    const item = make('label', `table-restore-option${count ? '' : ' is-empty'}`);
     const input = document.createElement('input');
     input.type = 'checkbox'; input.value = value; input.name = 'restoreTable';
-    item.append(input, document.createTextNode(` ${label}`));
+    input.disabled = count <= 0;
+    input.checked = count > 0;
+    item.append(input, document.createTextNode(` ${label}（${count}）`));
     box.append(item);
   });
   openModal($('#tableRestoreModal'));
@@ -5126,6 +5149,14 @@ $('#syncWeekCalendarButton')?.addEventListener('click', async () => {
   } catch (error) { showToast(error.message); }
 });
 $('#refreshCalendarToday')?.addEventListener('click', refreshTodayCalendar);
+$('#tableRestoreSelectAll')?.addEventListener('click', () => {
+  $$('#tableRestoreOptions input[name="restoreTable"]').forEach(input => {
+    if (!input.disabled) input.checked = true;
+  });
+});
+$('#tableRestoreSelectNone')?.addEventListener('click', () => {
+  $$('#tableRestoreOptions input[name="restoreTable"]').forEach(input => { input.checked = false; });
+});
 $('#tableRestoreForm').addEventListener('submit', async event => {
   event.preventDefault();
   const tables = $$('input[name="restoreTable"]:checked').map(input => input.value);
@@ -5135,7 +5166,8 @@ $('#tableRestoreForm').addEventListener('submit', async event => {
   try {
     const result = await apiRequest(`/api/backups/${encodeURIComponent(name)}/restore-tables`, { method: 'POST', body: JSON.stringify({ tables }) });
     closeModal($('#tableRestoreModal'));
-    showToast(`已按表恢复，安全备份 ${result.safety_backup}`);
+    const skipped = result.skipped_empty?.length ? `，空表已跳过 ${result.skipped_empty.length} 张` : '';
+    showToast(`已按表恢复 ${Object.keys(result.restored_tables || {}).length} 张表${skipped}`);
     setTimeout(() => location.reload(), 800);
   } catch (error) { showToast(error.message); }
 });

@@ -12,8 +12,8 @@
   <title>数智审监工作台</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='10' fill='%231C1C1C'/%3E%3Cpath d='M18 6.5 27.5 10.2v7.2c0 6.1-4 10.6-9.5 12.4-5.5-1.8-9.5-6.3-9.5-12.4v-7.2L18 6.5Z' fill='none' stroke='%23F5C84B' stroke-width='1.9' stroke-linejoin='round'/%3E%3Cpath d='M13.5 20.5v-4m4.5 4v-7m4.5 7v-2.5' stroke='%23FFF1C2' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='22.5' cy='13.5' r='1.7' fill='%23F5C84B'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css?v=1.0.0">
-  <link rel="stylesheet" href="ui-apple-hig.css?v=1.9.19">
-  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.42">
+  <link rel="stylesheet" href="ui-apple-hig.css?v=1.9.20">
+  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.43">
 </head>
 <body class="theme-soft-welcome is-booting">
   <div class="access-gate" id="accessGate" aria-hidden="true">
@@ -1047,7 +1047,7 @@
     </div>
   </div>
 
-  <div class="modal" id="tableRestoreModal" aria-hidden="true"><form class="modal-card modal-card-wide" id="tableRestoreForm"><header><div><p class="eyebrow">TABLE RESTORE</p><h2>按表恢复</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="tableRestoreBackupName"><p class="form-hint" id="tableRestoreHint">选择要从备份写回当前数据库的表。恢复前会自动创建安全备份。</p><div class="table-restore-grid" id="tableRestoreOptions"></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button danger-button">确认按表恢复</button></footer></form></div>
+  <div class="modal" id="tableRestoreModal" aria-hidden="true"><form class="modal-card modal-card-wide" id="tableRestoreForm"><header><div><p class="eyebrow">TABLE RESTORE</p><h2>按表恢复</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><input type="hidden" id="tableRestoreBackupName"><p class="form-hint" id="tableRestoreHint">选择要从备份写回当前数据库的表。导入的整库备份更适合用「整库恢复」。</p><div class="table-restore-toolbar"><button type="button" class="secondary-button" id="tableRestoreSelectAll">全选有数据的表</button><button type="button" class="secondary-button" id="tableRestoreSelectNone">全不选</button></div><div class="table-restore-grid" id="tableRestoreOptions"></div><footer><button type="button" class="secondary-button modal-close">取消</button><button type="submit" class="primary-button danger-button">确认按表恢复</button></footer></form></div>
 
   <div class="modal" id="sqlDiffModal" aria-hidden="true"><div class="modal-card modal-card-sheet"><header><div><p class="eyebrow">SQL DIFF</p><h2>版本对比</h2></div><button type="button" class="icon-button modal-close"><svg><use href="#i-close"/></svg></button></header><div class="form-grid modal-form-grid"><label>左侧版本<select id="sqlDiffLeft"></select></label><label>右侧版本<select id="sqlDiffRight"></select></label></div><p class="form-hint" id="sqlDiffSensitiveHint"></p><pre class="import-diff" id="sqlDiffOutput">选择两个版本后显示差异</pre><footer><button type="button" class="secondary-button" id="runSqlDiffButton">生成差异</button><button type="button" class="secondary-button modal-close">关闭</button></footer></div></div>
   <nav class="mobile-tabbar" id="mobileTabbar" aria-label="手机快捷导航">
@@ -1097,7 +1097,7 @@
     </div>
   </div>
   <datalist id="entityRelationOptions"></datalist>
-  <script src="app.js?v=1.9.46"></script>
+  <script src="app.js?v=1.9.47"></script>
 </body>
 </html>
 

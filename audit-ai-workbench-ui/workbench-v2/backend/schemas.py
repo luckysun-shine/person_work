@@ -414,7 +414,7 @@ class CsvImportPayload(BaseModel):
 
 
 class TableRestorePayload(BaseModel):
-    tables: list[str] = Field(min_length=1, max_length=40)
+    tables: list[str] = Field(min_length=1, max_length=50)
 
 
 class BackupMergePayload(BaseModel):

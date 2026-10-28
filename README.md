@@ -4,7 +4,7 @@
 
 `工作请求 → 周计划 / 日程 → SQL 取数 → 模型维护 → 审监监测台账 → 记录复盘 → 周报输出`
 
-正式应用位于 [`audit-ai-workbench-ui/workbench-v2`](audit-ai-workbench-ui/workbench-v2)，当前版本 **v1.9.35**。
+正式应用位于 [`audit-ai-workbench-ui/workbench-v2`](audit-ai-workbench-ui/workbench-v2)，当前版本 **v1.9.36**。
 
 界面主题：**Soft Welcome**（固定浅色）。同一套页面同时适配 **电脑浏览器** 与 **手机浏览器**（底部快捷栏 + 抽屉导航）。
 

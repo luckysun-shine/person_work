@@ -137,6 +137,37 @@ class ApiTestCase(unittest.TestCase):
         )
         self.assertEqual(wrong_ext.status_code, 400)
 
+    def test_table_restore_skips_empty_and_keeps_children(self):
+        import shutil
+        import sqlite3
+
+        from backend import common as C
+
+        original_title = self.client.get("/api/tasks/T-001").json()["title"]
+        created = self.client.post("/api/backups")
+        backup_name = created.json()["name"]
+        source_path = C.resolve_backup(backup_name)
+
+        empty_name = "workbench-empty-tasks-imported.db"
+        empty_path = C.backup_directory() / empty_name
+        shutil.copy(source_path, empty_path)
+        conn = sqlite3.connect(empty_path)
+        conn.execute("DELETE FROM tasks")
+        conn.commit()
+        conn.close()
+
+        blocked = self.client.post(f"/api/backups/{empty_name}/restore-tables", json={"tables": ["tasks"]})
+        self.assertEqual(blocked.status_code, 400)
+        self.assertEqual(self.client.get("/api/tasks/T-001").json()["title"], original_title)
+
+        restored = self.client.post(f"/api/backups/{backup_name}/restore-tables", json={"tables": ["projects"]})
+        self.assertEqual(restored.status_code, 200)
+        self.assertIn("project_relations", restored.json()["restored_tables"])
+
+        inspect = self.client.get(f"/api/backups/{backup_name}/inspect")
+        self.assertEqual(inspect.status_code, 200)
+        self.assertTrue(inspect.json()["has_content"])
+
     def test_unified_search_and_data_exchange(self):
         search = self.client.get("/api/search", params={"q": "采购付款"})
         self.assertEqual(search.status_code, 200)

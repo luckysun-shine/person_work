@@ -15,7 +15,7 @@ from fastapi import HTTPException, Response, status
 
 from . import db as database
 from .ai_client import DEFAULT_AI_SETTINGS, ai_ready
-from .db import PROJECT_DIR, connect, new_id, row_to_dict, transaction, utc_now
+from .db import PROJECT_DIR, connect, migrate_db, new_id, row_to_dict, transaction, utc_now
 from .secrets_util import decrypt_secret, encrypt_secret, machine_secret, mask_secret
 
 # Shared domain tags (notes assist + SQL assist)
@@ -24,7 +24,7 @@ NOTE_TAGS = (
     "模型", "数据请求", "口径", "风险", "数据质量", "规则变更", "项目复盘",
 )
 
-APP_VERSION = "1.9.35"
+APP_VERSION = "1.9.36"
 
 ACCESS_COOKIE = "workbench_access"
 PUBLIC_API_PREFIXES = (
@@ -345,7 +345,11 @@ EXPORT_TABLES = {
     "sql_versions": "SQL 版本",
     "model_runs": "模型运行",
     "model_versions": "模型版本",
+    "model_sql_versions": "模型 SQL 版本",
     "project_relations": "项目关系",
+    "project_update_steps": "台账更新步骤",
+    "project_executions": "台账执行记录",
+    "data_request_sql_versions": "请求 SQL 版本",
     "navigation_items": "常用导航",
     "stored_procedures": "存储过程",
     "procedure_versions": "存储过程版本",
@@ -363,6 +367,52 @@ EXPORT_TABLES = {
     "work_note_revisions": "工作记录修订",
     "project_templates": "项目模板",
 }
+
+TABLE_CHILDREN = {
+    "work_notes": ("work_note_revisions",),
+    "sql_assets": ("sql_versions",),
+    "data_requests": ("data_request_sql_versions",),
+    "monitoring_models": ("model_versions", "model_sql_versions", "model_runs"),
+    "projects": ("project_update_steps", "project_executions", "project_relations"),
+    "stored_procedures": ("procedure_versions", "procedure_deployments"),
+    "report_templates": ("generated_reports",),
+    "weekly_reports": ("report_versions",),
+    "generated_reports": ("report_versions",),
+    "calendar_subscriptions": ("calendar_events",),
+}
+
+RESTORE_INSERT_ORDER = (
+    "app_settings",
+    "project_templates",
+    "report_templates",
+    "navigation_items",
+    "projects",
+    "project_update_steps",
+    "project_executions",
+    "project_relations",
+    "sql_assets",
+    "sql_versions",
+    "stored_procedures",
+    "procedure_versions",
+    "procedure_deployments",
+    "monitoring_models",
+    "model_versions",
+    "model_sql_versions",
+    "model_runs",
+    "data_requests",
+    "data_request_sql_versions",
+    "tasks",
+    "work_notes",
+    "work_note_revisions",
+    "week_reviews",
+    "weekly_reports",
+    "generated_reports",
+    "report_versions",
+    "saved_searches",
+    "recent_searches",
+    "calendar_subscriptions",
+    "calendar_events",
+)
 
 
 
@@ -433,6 +483,11 @@ def validate_sqlite_backup(path: Path) -> dict:
     return {"tables": sorted(tables), "counts": counts, "size": path.stat().st_size}
 
 
+def backup_content_row_count(counts: dict | None) -> int:
+    skip = BACKUP_MERGE_SKIP_TABLES | {"saved_searches", "recent_searches"}
+    return sum(int((counts or {}).get(table) or 0) for table in EXPORT_TABLES if table not in skip)
+
+
 def save_uploaded_backup(content: bytes, original_name: str = "") -> Path:
     if len(content) > MAX_BACKUP_UPLOAD_BYTES:
         raise HTTPException(status_code=400, detail="备份文件超过 200MB 上限")
@@ -444,12 +499,75 @@ def save_uploaded_backup(content: bytes, original_name: str = "") -> Path:
     try:
         tmp.write_bytes(content)
         validate_sqlite_backup(tmp)
-        tmp.replace(target)
+        source = sqlite3.connect(tmp)
+        materialized = sqlite3.connect(target)
+        try:
+            source.backup(materialized)
+        finally:
+            materialized.close()
+            source.close()
+        tmp.unlink(missing_ok=True)
+        validate_sqlite_backup(target)
     except Exception:
         tmp.unlink(missing_ok=True)
         target.unlink(missing_ok=True)
         raise
     return target
+
+
+def expand_restore_tables(tables: list[str]) -> list[str]:
+    unknown = set(tables) - set(EXPORT_TABLES)
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"不支持恢复的数据表：{', '.join(sorted(unknown))}")
+    selected = set(tables)
+    for table in list(selected):
+        selected.update(TABLE_CHILDREN.get(table, ()))
+    return [table for table in RESTORE_INSERT_ORDER if table in selected]
+
+
+def restore_tables_from_backup(backup_path: Path, tables: list[str]) -> dict:
+    validation = validate_sqlite_backup(backup_path)
+    available = set(validation["tables"])
+    missing_requested = [table for table in tables if table not in available]
+    if missing_requested:
+        raise HTTPException(status_code=400, detail=f"备份中缺少数据表：{', '.join(missing_requested)}")
+    wanted = [table for table in expand_restore_tables(tables) if table in available]
+    counts = validation["counts"]
+    nonempty = [table for table in wanted if int(counts.get(table) or 0) > 0]
+    skipped_empty = [table for table in wanted if table not in nonempty]
+    if not nonempty:
+        raise HTTPException(status_code=400, detail="备份里这些表都没有数据，已拒绝恢复以免清空当前库")
+    target = connect()
+    restored: dict[str, int] = {}
+    try:
+        target.execute("PRAGMA foreign_keys = OFF")
+        target.execute("ATTACH DATABASE ? AS incoming", (str(backup_path.resolve().as_posix()),))
+        try:
+            target.execute("BEGIN")
+            for table in reversed(nonempty):
+                target.execute(f"DELETE FROM main.{table}")
+            for table in nonempty:
+                source_cols = [row[1] for row in target.execute(f"PRAGMA incoming.table_info({table})")]
+                dest_cols = {row[1] for row in target.execute(f"PRAGMA table_info({table})")}
+                columns = [column for column in source_cols if column in dest_cols]
+                if not columns:
+                    raise HTTPException(status_code=400, detail=f"备份表 {table} 与当前结构没有可对齐的字段")
+                column_sql = ",".join(columns)
+                target.execute(
+                    f"INSERT INTO main.{table} ({column_sql}) SELECT {column_sql} FROM incoming.{table}"
+                )
+                restored[table] = int(counts.get(table) or 0)
+            target.execute("COMMIT")
+        except Exception:
+            target.execute("ROLLBACK")
+            raise
+        finally:
+            target.execute("DETACH DATABASE incoming")
+        target.execute("PRAGMA foreign_keys = ON")
+    finally:
+        target.close()
+    migrate_db()
+    return {"restored_tables": restored, "skipped_empty": skipped_empty, "expanded_tables": wanted}
 
 
 def backup_merge_table_names(requested: list[str] | None = None) -> list[str]:

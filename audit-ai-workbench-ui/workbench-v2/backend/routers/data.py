@@ -10,7 +10,7 @@ from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 
 from .. import common as C
-from ..db import connect, init_db, transaction, utc_now
+from ..db import connect, migrate_db, utc_now
 from ..schemas import BackupMergePayload, CsvImportPayload, DataImportPayload, TableRestorePayload
 
 router = APIRouter(tags=["data"])
@@ -79,13 +79,18 @@ def import_backup_file(file: UploadFile = File(...)) -> dict:
     info = C.backup_info(path)
     validation = C.validate_sqlite_backup(path)
     removed = C.prune_backups()
+    content_rows = C.backup_content_row_count(validation["counts"])
     info.update({
         "imported": True,
         "original_name": Path(filename).name,
         "counts": validation["counts"],
+        "content_rows": content_rows,
+        "has_content": content_rows > 0,
         "pruned": removed,
         "retention": int(C.get_setting("backup_retention", 20) or 20),
     })
+    if not info["has_content"]:
+        info["warning"] = "备份里没有业务数据。若是从 Docker 直接复制正在运行的 workbench.db，WAL 模式下会是空库；请改用工作台里的「下载」。"
     return info
 
 
@@ -135,10 +140,27 @@ def download_backup(name: str) -> FileResponse:
     return FileResponse(C.resolve_backup(name), media_type="application/vnd.sqlite3", filename=name)
 
 
+@router.get("/api/backups/{name}/inspect")
+def inspect_backup(name: str) -> dict:
+    path = C.resolve_backup(name)
+    info = C.backup_info(path)
+    validation = C.validate_sqlite_backup(path)
+    content_rows = C.backup_content_row_count(validation["counts"])
+    info.update(validation)
+    info["content_rows"] = content_rows
+    info["has_content"] = content_rows > 0
+    return info
+
+
 @router.post("/api/backups/{name}/restore")
 def restore_backup(name: str) -> dict:
     backup_path = C.resolve_backup(name)
-    C.validate_sqlite_backup(backup_path)
+    validation = C.validate_sqlite_backup(backup_path)
+    if C.backup_content_row_count(validation["counts"]) <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="备份里没有业务数据，已拒绝整库恢复以免清空当前库。请使用工作台「下载」的备份，不要直接复制正在运行的 workbench.db。",
+        )
     safety = C.create_database_backup("before-restore")
     source = sqlite3.connect(backup_path)
     target = connect()
@@ -147,43 +169,18 @@ def restore_backup(name: str) -> dict:
     finally:
         target.close()
         source.close()
-    init_db()
+    migrate_db()
     return {"restored": name, "safety_backup": safety.name}
 
 
 @router.post("/api/backups/{name}/restore-tables")
 def restore_backup_tables(name: str, payload: TableRestorePayload) -> dict:
-    unknown = set(payload.tables) - set(C.EXPORT_TABLES)
-    if unknown:
-        raise HTTPException(status_code=400, detail=f"不支持恢复的数据表：{', '.join(sorted(unknown))}")
     backup_path = C.resolve_backup(name)
     safety = C.create_database_backup("before-table-restore")
-    source = sqlite3.connect(backup_path)
-    source.row_factory = sqlite3.Row
-    restored: dict[str, int] = {}
-    try:
-        available = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
-        missing = [table for table in payload.tables if table not in available]
-        if missing:
-            raise HTTPException(status_code=400, detail=f"备份中缺少数据表：{', '.join(missing)}")
-        with transaction() as connection:
-            connection.execute("PRAGMA foreign_keys = OFF")
-            for table in payload.tables:
-                rows = [dict(row) for row in source.execute(f"SELECT * FROM {table}").fetchall()]
-                connection.execute(f"DELETE FROM {table}")
-                for row in rows:
-                    columns = list(row)
-                    placeholders = ",".join("?" for _ in columns)
-                    connection.execute(
-                        f"INSERT INTO {table} ({','.join(columns)}) VALUES ({placeholders})",
-                        tuple(row[column] for column in columns),
-                    )
-                restored[table] = len(rows)
-            connection.execute("PRAGMA foreign_keys = ON")
-    finally:
-        source.close()
-    init_db()
-    return {"restored_tables": restored, "safety_backup": safety.name, "backup": name}
+    result = C.restore_tables_from_backup(backup_path, payload.tables)
+    result["safety_backup"] = safety.name
+    result["backup"] = name
+    return result
 
 
 @router.post("/api/backups/{name}/merge-preview")

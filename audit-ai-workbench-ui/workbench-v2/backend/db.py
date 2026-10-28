@@ -528,79 +528,88 @@ def ensure_column(connection: sqlite3.Connection, table: str, column: str, defin
         connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
+def migrate_schema(connection: sqlite3.Connection) -> None:
+    connection.executescript(SCHEMA)
+    ensure_column(connection, "monitoring_models", "update_steps_json", "TEXT NOT NULL DEFAULT '[]'")
+    ensure_column(connection, "monitoring_models", "sql_text", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(connection, "monitoring_models", "sql_current_version", "TEXT NOT NULL DEFAULT 'v1.0'")
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS model_sql_versions (
+            id TEXT PRIMARY KEY,
+            model_id TEXT NOT NULL,
+            version TEXT NOT NULL,
+            sql_text TEXT NOT NULL DEFAULT '',
+            change_summary TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (model_id) REFERENCES monitoring_models(id) ON DELETE CASCADE,
+            UNIQUE (model_id, version)
+        )"""
+    )
+    ensure_column(connection, "weekly_reports", "status", "TEXT NOT NULL DEFAULT 'draft'")
+    ensure_column(connection, "report_templates", "cover_json", "TEXT NOT NULL DEFAULT '{}'")
+    for column, definition in (
+        ("requester", "TEXT NOT NULL DEFAULT ''"),
+        ("department", "TEXT NOT NULL DEFAULT ''"),
+        ("waiting_on", "TEXT NOT NULL DEFAULT ''"),
+        ("delivery_method", "TEXT NOT NULL DEFAULT ''"),
+        ("delivery_location", "TEXT NOT NULL DEFAULT ''"),
+        ("sensitive_notes", "TEXT NOT NULL DEFAULT ''"),
+        ("sql_text", "TEXT NOT NULL DEFAULT ''"),
+        ("sql_current_version", "TEXT NOT NULL DEFAULT 'v1.0'"),
+    ):
+        ensure_column(connection, "data_requests", column, definition)
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS data_request_sql_versions (
+            id TEXT PRIMARY KEY,
+            request_id TEXT NOT NULL,
+            version TEXT NOT NULL,
+            sql_text TEXT NOT NULL DEFAULT '',
+            change_summary TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (request_id) REFERENCES data_requests(id) ON DELETE CASCADE,
+            UNIQUE (request_id, version)
+        )"""
+    )
+    ensure_column(connection, "tasks", "waiting_on", "TEXT NOT NULL DEFAULT ''")
+    for column, definition in (
+        ("completion_result", "TEXT NOT NULL DEFAULT ''"),
+        ("actual_minutes", "INTEGER NOT NULL DEFAULT 0"),
+        ("recurrence", "TEXT NOT NULL DEFAULT 'none'"),
+        ("recurrence_interval", "INTEGER NOT NULL DEFAULT 7"),
+        ("remind_at", "TEXT"),
+    ):
+        ensure_column(connection, "tasks", column, definition)
+    ensure_column(connection, "work_notes", "is_favorite", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(connection, "work_notes", "is_archived", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(connection, "navigation_items", "show_on_home", "INTEGER NOT NULL DEFAULT 1")
+    for column, definition in (
+        ("category", "TEXT NOT NULL DEFAULT '其他'"),
+        ("sort_order", "INTEGER NOT NULL DEFAULT 0"),
+        ("monitor_cycle", "TEXT NOT NULL DEFAULT '按需'"),
+        ("cycle_note", "TEXT NOT NULL DEFAULT ''"),
+        ("plan_detail", "TEXT NOT NULL DEFAULT ''"),
+        ("monitor_logic", "TEXT NOT NULL DEFAULT ''"),
+        ("code_backup", "TEXT NOT NULL DEFAULT ''"),
+        ("code_note", "TEXT NOT NULL DEFAULT ''"),
+    ):
+        ensure_column(connection, "projects", column, definition)
+    for key, value in DEFAULT_SETTINGS.items():
+        existing = connection.execute("SELECT key FROM app_settings WHERE key = ?", (key,)).fetchone()
+        if not existing:
+            connection.execute(
+                "INSERT INTO app_settings (key, value_json, updated_at) VALUES (?, ?, ?)",
+                (key, json.dumps(value, ensure_ascii=False), utc_now()),
+            )
+
+
+def migrate_db(db_path: Path | None = None) -> None:
+    with transaction(db_path) as connection:
+        migrate_schema(connection)
+
+
 def init_db(db_path: Path | None = None) -> None:
     with transaction(db_path) as connection:
-        connection.executescript(SCHEMA)
-        ensure_column(connection, "monitoring_models", "update_steps_json", "TEXT NOT NULL DEFAULT '[]'")
-        ensure_column(connection, "monitoring_models", "sql_text", "TEXT NOT NULL DEFAULT ''")
-        ensure_column(connection, "monitoring_models", "sql_current_version", "TEXT NOT NULL DEFAULT 'v1.0'")
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS model_sql_versions (
-                id TEXT PRIMARY KEY,
-                model_id TEXT NOT NULL,
-                version TEXT NOT NULL,
-                sql_text TEXT NOT NULL DEFAULT '',
-                change_summary TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (model_id) REFERENCES monitoring_models(id) ON DELETE CASCADE,
-                UNIQUE (model_id, version)
-            )"""
-        )
-        ensure_column(connection, "weekly_reports", "status", "TEXT NOT NULL DEFAULT 'draft'")
-        ensure_column(connection, "report_templates", "cover_json", "TEXT NOT NULL DEFAULT '{}'")
-        for column, definition in (
-            ("requester", "TEXT NOT NULL DEFAULT ''"),
-            ("department", "TEXT NOT NULL DEFAULT ''"),
-            ("waiting_on", "TEXT NOT NULL DEFAULT ''"),
-            ("delivery_method", "TEXT NOT NULL DEFAULT ''"),
-            ("delivery_location", "TEXT NOT NULL DEFAULT ''"),
-            ("sensitive_notes", "TEXT NOT NULL DEFAULT ''"),
-            ("sql_text", "TEXT NOT NULL DEFAULT ''"),
-            ("sql_current_version", "TEXT NOT NULL DEFAULT 'v1.0'"),
-        ):
-            ensure_column(connection, "data_requests", column, definition)
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS data_request_sql_versions (
-                id TEXT PRIMARY KEY,
-                request_id TEXT NOT NULL,
-                version TEXT NOT NULL,
-                sql_text TEXT NOT NULL DEFAULT '',
-                change_summary TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (request_id) REFERENCES data_requests(id) ON DELETE CASCADE,
-                UNIQUE (request_id, version)
-            )"""
-        )
-        ensure_column(connection, "tasks", "waiting_on", "TEXT NOT NULL DEFAULT ''")
-        for column, definition in (
-            ("completion_result", "TEXT NOT NULL DEFAULT ''"),
-            ("actual_minutes", "INTEGER NOT NULL DEFAULT 0"),
-            ("recurrence", "TEXT NOT NULL DEFAULT 'none'"),
-            ("recurrence_interval", "INTEGER NOT NULL DEFAULT 7"),
-            ("remind_at", "TEXT"),
-        ):
-            ensure_column(connection, "tasks", column, definition)
-        ensure_column(connection, "work_notes", "is_favorite", "INTEGER NOT NULL DEFAULT 0")
-        ensure_column(connection, "work_notes", "is_archived", "INTEGER NOT NULL DEFAULT 0")
-        ensure_column(connection, "navigation_items", "show_on_home", "INTEGER NOT NULL DEFAULT 1")
-        for column, definition in (
-            ("category", "TEXT NOT NULL DEFAULT '其他'"),
-            ("sort_order", "INTEGER NOT NULL DEFAULT 0"),
-            ("monitor_cycle", "TEXT NOT NULL DEFAULT '按需'"),
-            ("cycle_note", "TEXT NOT NULL DEFAULT ''"),
-            ("plan_detail", "TEXT NOT NULL DEFAULT ''"),
-            ("monitor_logic", "TEXT NOT NULL DEFAULT ''"),
-            ("code_backup", "TEXT NOT NULL DEFAULT ''"),
-            ("code_note", "TEXT NOT NULL DEFAULT ''"),
-        ):
-            ensure_column(connection, "projects", column, definition)
-        for key, value in DEFAULT_SETTINGS.items():
-            existing = connection.execute("SELECT key FROM app_settings WHERE key = ?", (key,)).fetchone()
-            if not existing:
-                connection.execute(
-                    "INSERT INTO app_settings (key, value_json, updated_at) VALUES (?, ?, ?)",
-                    (key, json.dumps(value, ensure_ascii=False), utc_now()),
-                )
+        migrate_schema(connection)
         seed_database(connection)
 
 
