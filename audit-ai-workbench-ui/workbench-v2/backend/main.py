@@ -32,6 +32,7 @@ def _is_mcp_path(path: str) -> bool:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    C.reconcile_machine_bound_secrets()
     yield
 
 

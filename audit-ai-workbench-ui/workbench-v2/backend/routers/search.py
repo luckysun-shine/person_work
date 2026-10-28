@@ -1,4 +1,5 @@
 """API routes: search."""
+from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
 
@@ -40,7 +41,7 @@ def record_recent_search(query: str, types: str | None, result_count: int) -> No
 
 
 @router.get("/api/search")
-def unified_search(q: str = Query(min_length=1, max_length=100), types: str | None = None) -> dict:
+def unified_search(q: Annotated[str, Query(min_length=1, max_length=100)], types: str | None = None) -> dict:
     requested = set(types.split(",")) if types else set(SEARCH_ENTITIES)
     keyword = f"%{q.strip()}%"
     results: list[dict] = []

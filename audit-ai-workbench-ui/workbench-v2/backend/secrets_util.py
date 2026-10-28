@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import os
 from pathlib import Path
@@ -42,18 +43,29 @@ def encrypt_secret(plain: str) -> str:
 
 
 def decrypt_secret(value: str) -> str:
-    if not value:
+    if not isinstance(value, str) or not value:
         return ""
     if not value.startswith("enc:"):
         return value
-    key = machine_secret()
-    mixed = base64.urlsafe_b64decode(value[4:].encode("ascii"))
-    data = bytes(b ^ key[i % len(key)] for i, b in enumerate(mixed))
-    return data.decode("utf-8")
+    try:
+        key = machine_secret()
+        mixed = base64.urlsafe_b64decode(value[4:].encode("ascii"))
+        data = bytes(b ^ key[i % len(key)] for i, b in enumerate(mixed))
+        return data.decode("utf-8")
+    except (UnicodeDecodeError, ValueError, binascii.Error):
+        return ""
+
+
+def secret_decryptable(value: str | None) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    if not value.startswith("enc:"):
+        return True
+    return bool(decrypt_secret(value))
 
 
 def mask_secret(value: str) -> str:
-    plain = decrypt_secret(value) if value.startswith("enc:") else value
+    plain = decrypt_secret(value) if isinstance(value, str) and value.startswith("enc:") else (value or "")
     if not plain:
         return ""
     if len(plain) <= 8:

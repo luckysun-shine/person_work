@@ -1,6 +1,7 @@
 """API routes: projects."""
 import json
 import re
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
@@ -90,9 +91,9 @@ def _attach_ledger_summary(items: list[dict]) -> list[dict]:
 
 @router.get("/api/projects")
 def list_projects(
-    category: str | None = Query(default=None),
-    q: str | None = Query(default=None),
-    ledger_only: bool = Query(default=True),
+    category: Annotated[str | None, Query()] = None,
+    q: Annotated[str | None, Query()] = None,
+    ledger_only: Annotated[bool, Query()] = True,
 ) -> list[dict]:
     clauses: list[str] = []
     params: list[str] = []

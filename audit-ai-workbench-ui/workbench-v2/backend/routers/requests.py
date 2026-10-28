@@ -1,4 +1,5 @@
 """API routes: requests."""
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
@@ -19,7 +20,7 @@ def list_data_requests(
     q: str | None = None,
     requester: str | None = None,
     department: str | None = None,
-    request_status: str | None = Query(default=None, alias="status"),
+    request_status: Annotated[str | None, Query(alias="status")] = None,
     date_from: str | None = None,
     date_to: str | None = None,
 ) -> list[dict]:

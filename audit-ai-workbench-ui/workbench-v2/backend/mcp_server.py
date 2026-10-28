@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from pydantic import ValidationError
 
 from . import common as C
 from .routers import calendar as calendar_routes
@@ -142,9 +143,13 @@ def get_week_plan() -> dict:
 
 def search_workbench(query: str, types: str | None = None) -> dict:
     """跨任务、请求、台账、记录、SQL 资产名称检索。types 为逗号分隔，例如 task,project,note。"""
-    keyword = (query or "").strip()
+    keyword = str(query or "").strip()
     if len(keyword) < 1:
         return {"query": "", "total": 0, "results": []}
+    if isinstance(types, (list, tuple)):
+        types = ",".join(str(item).strip() for item in types if str(item).strip()) or None
+    elif types is not None:
+        types = str(types).strip() or None
     payload = search_routes.unified_search(q=keyword[:100], types=types)
     results = [
         {
@@ -179,19 +184,19 @@ def get_open_requests() -> dict:
 
 def get_task(task_id: str) -> dict:
     """按编号查看一条任务。"""
-    return _public_task(task_routes.get_task(task_id))
+    return _public_task(task_routes.get_task(str(task_id).strip()))
 
 
 def get_note(note_id: str) -> dict:
     """按编号查看一条工作记录（正文截断，不含修订历史）。"""
-    note = notes_routes.get_note(note_id)
+    note = notes_routes.get_note(str(note_id).strip())
     note.pop("revisions", None)
     return _public_note(note, include_body=True)
 
 
 def get_project(project_id: str) -> dict:
     """按编号查看监管项摘要：下一步、待办步骤、绑定模型。不含规划原文和代码备份。"""
-    detail = project_routes.get_project(project_id)
+    detail = project_routes.get_project(str(project_id).strip())
     project = _public_project(detail.get("project") or {})
     project["tasks"] = [_public_task(task) for task in (detail.get("tasks") or [])[:12]]
     project["open_requests"] = [
@@ -210,10 +215,10 @@ def get_project(project_id: str) -> dict:
 def create_task(title: str, planned_date: str | None = None, priority: str = "medium", notes: str = "") -> dict:
     """新建一条周计划任务。planned_date 用 YYYY-MM-DD，缺省为今天。"""
     payload = TaskCreate(
-        title=title.strip(),
-        planned_date=planned_date or date.today().isoformat(),
-        priority=priority if priority in ("low", "medium", "high") else "medium",
-        notes=notes or "",
+        title=str(title or "").strip(),
+        planned_date=(str(planned_date).strip() if planned_date else "") or date.today().isoformat(),
+        priority=priority if str(priority or "") in ("low", "medium", "high") else "medium",
+        notes=str(notes or ""),
     )
     return _public_task(task_routes.create_task(payload))
 
@@ -221,17 +226,18 @@ def create_task(title: str, planned_date: str | None = None, priority: str = "me
 def complete_task(task_id: str, completion_result: str = "") -> dict:
     """将任务标记为已完成。"""
     payload = TaskUpdate(status="done")
-    if completion_result.strip():
-        payload.completion_result = completion_result.strip()
-    return _public_task(task_routes.update_task(task_id, payload))
+    result = str(completion_result or "").strip()
+    if result:
+        payload.completion_result = result
+    return _public_task(task_routes.update_task(str(task_id).strip(), payload))
 
 
 def add_note(title: str, content: str = "", note_type: str = "随手记录") -> dict:
     """新增一条工作记录。"""
     payload = NoteCreate(
-        title=title.strip(),
-        content=content or "",
-        type=(note_type or "随手记录").strip() or "随手记录",
+        title=str(title or "").strip(),
+        content=str(content or ""),
+        type=(str(note_type or "").strip() or "随手记录"),
     )
     return _public_note(notes_routes.create_note(payload), include_body=True)
 
@@ -297,17 +303,36 @@ def _tool_list() -> list[dict]:
     return items
 
 
+def _normalize_arguments(func: Callable, arguments: dict | None) -> dict:
+    incoming = arguments if isinstance(arguments, dict) else {}
+    kwargs: dict[str, Any] = {}
+    for name in inspect.signature(func).parameters:
+        if name not in incoming:
+            continue
+        value = incoming[name]
+        if value is None:
+            continue
+        if name == "types" and isinstance(value, (list, tuple)):
+            value = ",".join(str(item).strip() for item in value if str(item).strip())
+            if not value:
+                continue
+        elif not isinstance(value, str):
+            value = str(value)
+        kwargs[name] = value
+    return kwargs
+
+
 def _call_tool(name: str, arguments: dict | None) -> dict:
     func = TOOLS.get(name)
     if not func:
         return {"content": [{"type": "text", "text": f"未知工具：{name}"}], "isError": True}
     try:
-        result = func(**(arguments or {}))
+        result = func(**_normalize_arguments(func, arguments))
         text = json.dumps(result, ensure_ascii=False, default=str)
         return {"content": [{"type": "text", "text": text}], "isError": False}
     except HTTPException as exc:
         return {"content": [{"type": "text", "text": str(exc.detail)}], "isError": True}
-    except TypeError as exc:
+    except (TypeError, ValidationError) as exc:
         return {"content": [{"type": "text", "text": f"参数不正确：{exc}"}], "isError": True}
     except Exception as exc:
         return {"content": [{"type": "text", "text": f"调用失败：{exc}"}], "isError": True}

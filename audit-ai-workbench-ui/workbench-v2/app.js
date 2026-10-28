@@ -5475,17 +5475,31 @@ document.addEventListener('keydown', event => {
 
 async function bootstrapApi() {
   try {
-    const health = await apiRequest('/api/health');
-    state.apiAvailable = true;
-    if (health.access_required) await ensureAccessUnlocked();
-    else hideAccessGate();
-    $('.sidebar-foot strong').textContent = '本地数据库已连接';
-    $('.sidebar-foot small').textContent = health.ai_ready ? 'AI 已就绪' : 'AI 未启用或未配置';
+    let health = null;
+    try {
+      health = await apiRequest('/api/health');
+    } catch (_) {
+      health = null;
+    }
+    if (health) {
+      state.apiAvailable = true;
+      if (health.access_required) await ensureAccessUnlocked();
+      else hideAccessGate();
+      $('.sidebar-foot strong').textContent = '本地数据库已连接';
+      $('.sidebar-foot small').textContent = health.ai_ready ? 'AI 已就绪' : 'AI 未启用或未配置';
+    } else {
+      hideAccessGate();
+    }
     const [notes, requests, sqlAssets, procedures, models, projects, navigation, reportTemplates, genericReports, projectTemplates] = await Promise.all([
       apiRequest('/api/notes?archived=false'), apiRequest('/api/data-requests'), apiRequest('/api/sql-assets'),
       apiRequest('/api/procedures'), apiRequest('/api/models'), apiRequest('/api/projects'), apiRequest('/api/navigation'),
       apiRequest('/api/report-templates'), apiRequest('/api/reports'), apiRequest('/api/project-templates'),
     ]);
+    state.apiAvailable = true;
+    if (!health) {
+      $('.sidebar-foot strong').textContent = '本地数据库已连接';
+      $('.sidebar-foot small').textContent = '健康检查异常，数据已载入';
+    }
     state.notes = notes.map(normalizeNote); state.requests = requests; state.sqlAssets = sqlAssets;
     state.procedures = procedures; state.models = models; state.projects = projects; state.navigation = navigation;
     state.reportTemplates = reportTemplates; state.genericReports = genericReports; state.projectTemplates = projectTemplates;

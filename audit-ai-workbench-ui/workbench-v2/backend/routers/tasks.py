@@ -1,5 +1,6 @@
 """API routes: tasks."""
 from datetime import date, datetime, timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
@@ -38,7 +39,7 @@ def list_tasks(
     planned_date: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
-    task_status: str | None = Query(default=None, alias="status"),
+    task_status: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[dict]:
     conditions: list[str] = []
     parameters: list[str] = []

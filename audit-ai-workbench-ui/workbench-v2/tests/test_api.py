@@ -229,6 +229,37 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(self.client.get("/api/tasks/T-001").json()["title"], original_title)
         self.assertEqual(self.client.get(f"/api/tasks/{local_id}").status_code, 200)
 
+    def test_restore_foreign_encrypted_secrets_keeps_health_and_data(self):
+        import json
+        import sqlite3
+
+        from backend import common as C
+
+        saved = self.client.put("/api/settings", json={"ai": {"api_key": "sk-local-keep-me-123456"}})
+        self.assertEqual(saved.status_code, 200)
+        self.assertTrue(self.client.get("/api/settings").json()["ai"]["has_api_key"])
+        created = self.client.post("/api/backups")
+        backup_name = created.json()["name"]
+        path = C.resolve_backup(backup_name)
+        conn = sqlite3.connect(path)
+        row = conn.execute("SELECT value_json FROM app_settings WHERE key = 'ai'").fetchone()
+        payload = json.loads(row[0])
+        payload["api_key"] = "enc:" + "A" * 64
+        conn.execute("UPDATE app_settings SET value_json = ? WHERE key = 'ai'", (json.dumps(payload, ensure_ascii=False),))
+        conn.commit()
+        conn.close()
+
+        restored = self.client.post(f"/api/backups/{backup_name}/restore")
+        self.assertEqual(restored.status_code, 200)
+        health = self.client.get("/api/health")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.json()["status"], "ok")
+        self.assertGreaterEqual(len(self.client.get("/api/projects").json()), 3)
+        self.assertEqual(self.client.get("/api/tasks/T-001").status_code, 200)
+        settings = self.client.get("/api/settings")
+        self.assertEqual(settings.status_code, 200)
+        self.assertTrue(settings.json()["ai"]["has_api_key"])
+
     def test_unified_search_and_data_exchange(self):
         search = self.client.get("/api/search", params={"q": "采购付款"})
         self.assertEqual(search.status_code, 200)
@@ -1205,36 +1236,134 @@ class ApiTestCase(unittest.TestCase):
                 json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
             )
             names = {item["name"] for item in listed.json()["result"]["tools"]}
-            self.assertIn("get_today", names)
-            self.assertIn("create_task", names)
-            today = self.client.post(
-                "/mcp",
-                headers=headers,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 3,
-                    "method": "tools/call",
-                    "params": {"name": "get_today", "arguments": {}},
+            self.assertEqual(
+                names,
+                {
+                    "get_today",
+                    "get_week_plan",
+                    "search_workbench",
+                    "get_ledger_attention",
+                    "get_open_requests",
+                    "get_task",
+                    "get_note",
+                    "get_project",
+                    "create_task",
+                    "complete_task",
+                    "add_note",
                 },
             )
-            today_text = json.loads(today.json()["result"]["content"][0]["text"])
-            self.assertIn("summary", today_text)
-            created = self.client.post(
-                "/mcp",
-                headers=headers,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 4,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "create_task",
-                        "arguments": {"title": "MCP 新建任务", "priority": "high", "planned_date": "2099-01-05"},
+            rpc_id = 2
+
+            def call(name, arguments=None):
+                nonlocal rpc_id
+                rpc_id += 1
+                response = self.client.post(
+                    "/mcp",
+                    headers=headers,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": rpc_id,
+                        "method": "tools/call",
+                        "params": {"name": name, "arguments": arguments or {}},
                     },
+                )
+                self.assertEqual(response.status_code, 200)
+                result = response.json()["result"]
+                text = result["content"][0]["text"]
+                payload = json.loads(text) if not result.get("isError") else text
+                return result, payload
+
+            def assert_no_secrets(payload):
+                dumped = json.dumps(payload, ensure_ascii=False)
+                for key in (
+                    "sql_text",
+                    "password",
+                    "api_key",
+                    "plan_detail",
+                    "monitor_logic",
+                    "definition_text",
+                    "revisions",
+                ):
+                    self.assertNotIn(f'"{key}"', dumped)
+                self.assertNotIn("WITH payment_base", dumped)
+
+            today_result, today_text = call("get_today", {"unexpected": 1})
+            self.assertFalse(today_result["isError"])
+            self.assertIn("summary", today_text)
+            assert_no_secrets(today_text)
+
+            week_result, week_text = call("get_week_plan")
+            self.assertFalse(week_result["isError"])
+            self.assertEqual(len(week_text["days"]), 7)
+            assert_no_secrets(week_text)
+
+            ledger_result, ledger_text = call("get_ledger_attention")
+            self.assertFalse(ledger_result["isError"])
+            self.assertIn("items", ledger_text)
+            assert_no_secrets(ledger_text)
+
+            requests_result, requests_text = call("get_open_requests")
+            self.assertFalse(requests_result["isError"])
+            self.assertIn("items", requests_text)
+            assert_no_secrets(requests_text)
+
+            search_result, search_text = call(
+                "search_workbench",
+                {"query": "采购", "types": ["task", "project", "note", "sql_asset"]},
+            )
+            self.assertFalse(search_result["isError"])
+            self.assertGreaterEqual(search_text["total"], 1)
+            assert_no_secrets(search_text)
+
+            sql_hit_result, sql_hit = call("search_workbench", {"query": "payment_base"})
+            self.assertFalse(sql_hit_result["isError"])
+            assert_no_secrets(sql_hit)
+
+            task_result, task_text = call("get_task", {"task_id": "T-001"})
+            self.assertFalse(task_result["isError"])
+            self.assertEqual(task_text["id"], "T-001")
+            assert_no_secrets(task_text)
+
+            note_result, note_text = call("get_note", {"note_id": "N-001"})
+            self.assertFalse(note_result["isError"])
+            self.assertEqual(note_text["id"], "N-001")
+            self.assertIn("content", note_text)
+            assert_no_secrets(note_text)
+
+            project_result, project_text = call("get_project", {"project_id": "P-001"})
+            self.assertFalse(project_result["isError"])
+            self.assertEqual(project_text["id"], "P-001")
+            assert_no_secrets(project_text)
+
+            missing_result, missing_text = call("get_task", {"task_id": "T-NOT-FOUND"})
+            self.assertTrue(missing_result["isError"])
+            self.assertIn("不存在", missing_text)
+
+            created_result, created_task = call(
+                "create_task",
+                {
+                    "title": "MCP 新建任务",
+                    "priority": "high",
+                    "planned_date": "2099-01-05",
+                    "extra": "ignore-me",
                 },
             )
-            created_task = json.loads(created.json()["result"]["content"][0]["text"])
+            self.assertFalse(created_result["isError"])
             self.assertEqual(created_task["title"], "MCP 新建任务")
-            self.assertFalse(created.json()["result"]["isError"])
+
+            completed_result, completed_task = call(
+                "complete_task",
+                {"task_id": created_task["id"], "completion_result": None},
+            )
+            self.assertFalse(completed_result["isError"])
+            self.assertEqual(completed_task["status"], "done")
+
+            note_created_result, created_note = call(
+                "add_note",
+                {"title": "MCP 记录", "content": "复核通过", "note_type": "随手记录"},
+            )
+            self.assertFalse(note_created_result["isError"])
+            self.assertEqual(created_note["title"], "MCP 记录")
         finally:
             if old is None:
                 os.environ.pop("WORKBENCH_MCP_TOKEN", None)

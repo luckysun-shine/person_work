@@ -16,7 +16,7 @@ from fastapi import HTTPException, Response, status
 from . import db as database
 from .ai_client import DEFAULT_AI_SETTINGS, ai_ready
 from .db import PROJECT_DIR, connect, migrate_db, new_id, row_to_dict, transaction, utc_now
-from .secrets_util import decrypt_secret, encrypt_secret, machine_secret, mask_secret
+from .secrets_util import decrypt_secret, encrypt_secret, machine_secret, mask_secret, secret_decryptable
 
 # Shared domain tags (notes assist + SQL assist)
 NOTE_TAGS = (
@@ -24,7 +24,7 @@ NOTE_TAGS = (
     "模型", "数据请求", "口径", "风险", "数据质量", "规则变更", "项目复盘",
 )
 
-APP_VERSION = "1.9.37"
+APP_VERSION = "1.9.40"
 
 ACCESS_COOKIE = "workbench_access"
 PUBLIC_API_PREFIXES = (
@@ -126,18 +126,31 @@ def load_ai_settings() -> dict:
 
 
 def public_ai_settings() -> dict:
-    settings = load_ai_settings()
-    return {
-        "enabled": bool(settings.get("enabled")),
-        "base_url": settings.get("base_url") or "",
-        "model": settings.get("model") or "",
-        "api_key_masked": mask_secret(settings.get("api_key") or ""),
-        "has_api_key": bool(settings.get("api_key")),
-        "timeout_seconds": int(settings.get("timeout_seconds") or 60),
-        "include_sql_text": bool(settings.get("include_sql_text", True)),
-        "temperature": float(settings.get("temperature") or 0.2),
-        "ready": ai_ready(settings),
-    }
+    try:
+        settings = load_ai_settings()
+        return {
+            "enabled": bool(settings.get("enabled")),
+            "base_url": settings.get("base_url") or "",
+            "model": settings.get("model") or "",
+            "api_key_masked": mask_secret(settings.get("api_key") or ""),
+            "has_api_key": bool(settings.get("api_key")),
+            "timeout_seconds": int(settings.get("timeout_seconds") or 60),
+            "include_sql_text": bool(settings.get("include_sql_text", True)),
+            "temperature": float(settings.get("temperature") or 0.2),
+            "ready": ai_ready(settings),
+        }
+    except Exception:
+        return {
+            "enabled": False,
+            "base_url": "",
+            "model": "",
+            "api_key_masked": "",
+            "has_api_key": False,
+            "timeout_seconds": 60,
+            "include_sql_text": True,
+            "temperature": 0.2,
+            "ready": False,
+        }
 
 
 def load_dingtalk_calendar_settings() -> dict:
@@ -163,21 +176,37 @@ def load_dingtalk_calendar_settings() -> dict:
 
 
 def public_dingtalk_calendar_settings() -> dict:
-    settings = load_dingtalk_calendar_settings()
-    return {
-        "enabled": bool(settings.get("enabled")),
-        "provider": settings.get("provider") or "caldav",
-        "ics_url": settings.get("ics_url") or "",
-        "app_key": settings.get("app_key") or "",
-        "has_app_secret": bool(settings.get("app_secret")),
-        "calendar_id": settings.get("calendar_id") or "",
-        "caldav_url": settings.get("caldav_url") or "https://calendar.dingtalk.com",
-        "caldav_username": settings.get("caldav_username") or "",
-        "has_caldav_password": bool(settings.get("caldav_password")),
-        "caldav_path": settings.get("caldav_path") or "",
-        "sync_days_back": int(settings.get("sync_days_back") or 7),
-        "sync_days_forward": int(settings.get("sync_days_forward") or 21),
-    }
+    try:
+        settings = load_dingtalk_calendar_settings()
+        return {
+            "enabled": bool(settings.get("enabled")),
+            "provider": settings.get("provider") or "caldav",
+            "ics_url": settings.get("ics_url") or "",
+            "app_key": settings.get("app_key") or "",
+            "has_app_secret": bool(settings.get("app_secret")),
+            "calendar_id": settings.get("calendar_id") or "",
+            "caldav_url": settings.get("caldav_url") or "https://calendar.dingtalk.com",
+            "caldav_username": settings.get("caldav_username") or "",
+            "has_caldav_password": bool(settings.get("caldav_password")),
+            "caldav_path": settings.get("caldav_path") or "",
+            "sync_days_back": int(settings.get("sync_days_back") or 7),
+            "sync_days_forward": int(settings.get("sync_days_forward") or 21),
+        }
+    except Exception:
+        return {
+            "enabled": False,
+            "provider": "caldav",
+            "ics_url": "",
+            "app_key": "",
+            "has_app_secret": False,
+            "calendar_id": "",
+            "caldav_url": "https://calendar.dingtalk.com",
+            "caldav_username": "",
+            "has_caldav_password": False,
+            "caldav_path": "",
+            "sync_days_back": 7,
+            "sync_days_forward": 21,
+        }
 
 
 def public_calendar_subscription(item: dict) -> dict:
@@ -538,6 +567,37 @@ def apply_sqlite_backup(source_path: Path, dest_path: Path | None = None) -> Non
         destination.close()
 
 
+def snapshot_machine_bound_secrets() -> dict:
+    return {
+        "ai": get_setting("ai", None),
+        "dingtalk_calendar": get_setting("dingtalk_calendar", None),
+    }
+
+
+def _replace_undecryptable_secret(current: dict, previous: dict | None, field: str) -> bool:
+    value = current.get(field) or ""
+    if not isinstance(value, str) or not value.startswith("enc:") or secret_decryptable(value):
+        return False
+    prior = (previous or {}).get(field) or ""
+    current[field] = prior if secret_decryptable(prior) else ""
+    return True
+
+
+def reconcile_machine_bound_secrets(previous: dict | None = None) -> None:
+    previous = previous or {}
+    ai = get_setting("ai", None)
+    if isinstance(ai, dict) and _replace_undecryptable_secret(ai, previous.get("ai") if isinstance(previous.get("ai"), dict) else None, "api_key"):
+        set_setting("ai", ai)
+    ding = get_setting("dingtalk_calendar", None)
+    if isinstance(ding, dict):
+        prior = previous.get("dingtalk_calendar") if isinstance(previous.get("dingtalk_calendar"), dict) else None
+        changed = False
+        for field in ("app_secret", "caldav_password"):
+            changed = _replace_undecryptable_secret(ding, prior, field) or changed
+        if changed:
+            set_setting("dingtalk_calendar", ding)
+
+
 def restore_database_from_backup(backup_path: Path) -> dict:
     validation = validate_sqlite_backup(backup_path)
     if backup_content_row_count(validation["counts"]) <= 0:
@@ -545,6 +605,7 @@ def restore_database_from_backup(backup_path: Path) -> dict:
             status_code=400,
             detail="备份里没有业务数据，已拒绝整库恢复以免清空当前库。请使用工作台「下载」的备份，不要直接复制正在运行的 workbench.db。",
         )
+    previous_secrets = snapshot_machine_bound_secrets()
     safety = create_database_backup("before-restore")
     try:
         apply_sqlite_backup(backup_path)
@@ -555,6 +616,7 @@ def restore_database_from_backup(backup_path: Path) -> dict:
             pass
         raise
     migrate_db()
+    reconcile_machine_bound_secrets(previous_secrets)
     return {"restored": backup_path.name, "safety_backup": safety.name, "counts": validation["counts"]}
 
 
