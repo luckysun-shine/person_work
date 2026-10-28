@@ -13,7 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Crect width='36' height='36' rx='10' fill='%231C1C1C'/%3E%3Cpath d='M18 6.5 27.5 10.2v7.2c0 6.1-4 10.6-9.5 12.4-5.5-1.8-9.5-6.3-9.5-12.4v-7.2L18 6.5Z' fill='none' stroke='%23F5C84B' stroke-width='1.9' stroke-linejoin='round'/%3E%3Cpath d='M13.5 20.5v-4m4.5 4v-7m4.5 7v-2.5' stroke='%23FFF1C2' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='22.5' cy='13.5' r='1.7' fill='%23F5C84B'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css?v=1.0.0">
   <link rel="stylesheet" href="ui-apple-hig.css?v=1.9.18">
-  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.32">
+  <link rel="stylesheet" href="ui-soft-welcome.css?v=1.0.40">
 </head>
 <body class="theme-soft-welcome">
   <div class="app-shell">
@@ -91,6 +91,10 @@
               </div>
             </div>
             <div class="today-head-side">
+              <div class="today-clock" id="todayClock" aria-live="polite">
+                <strong id="todayClockTime">--:--:--</strong>
+                <span id="todayClockDate">—</span>
+              </div>
               <div class="today-hero-stats" aria-label="今日概览">
                 <div><strong id="todayStatTodo">0</strong><em>今日待办</em></div>
                 <div><strong id="todayStatDone">0</strong><em>本周完成</em></div>
@@ -305,7 +309,11 @@
         <section class="view" id="view-requests" data-title="数据请求">
           <div class="page-head soft-page-head"><div><p class="eyebrow">REQUEST ARCHIVE</p><h1>数据请求</h1><p>独立存档同事日常取数需求：主题、口径与 SQL 版本。</p></div><button class="primary-button" id="newRequestButton"><svg><use href="#i-plus"/></svg>新建请求</button></div>
           <div class="summary-line soft-summary"><div><strong>0</strong><span>全部请求</span></div><div><strong>0</strong><span>处理中</span></div><div><strong>0</strong><span>本月已交付</span></div><p>平均交付用时 <strong id="requestAverageDays">—</strong></p></div>
-          <div class="list-toolbar request-filter-bar soft-list-toolbar"><div class="filter-tabs" id="requestStatusFilters"><button class="active" data-status="all">全部</button><button data-status="pending">待处理</button><button data-status="waiting">待确认</button><button data-status="working">处理中</button><button data-status="done">已交付</button></div><div class="batch-actions"><button class="secondary-button" id="requestBatchDone" disabled>批量完成</button><button class="secondary-button danger-button" id="requestBatchDelete" disabled>删除所选</button><div class="inline-search"><svg><use href="#i-search"/></svg><input id="requestSearch" placeholder="搜索主题、用途或编号"></div></div></div>
+          <div class="list-toolbar request-filter-bar soft-list-toolbar">
+            <div class="inline-search wide"><svg><use href="#i-search"/></svg><input id="requestSearch" placeholder="搜索主题、用途或编号"></div>
+            <div class="filter-tabs" id="requestStatusFilters"><button class="active" data-status="all">全部</button><button data-status="pending">待处理</button><button data-status="waiting">待确认</button><button data-status="working">处理中</button><button data-status="done">已交付</button></div>
+            <div class="batch-actions"><button class="secondary-button" id="requestBatchDone" disabled>批量完成</button><button class="secondary-button danger-button" id="requestBatchDelete" disabled>删除所选</button></div>
+          </div>
           <div class="form-grid request-advanced-filters soft-advanced-filters"><label>需求人<input id="requestFilterRequester" placeholder="姓名"></label><label>部门<input id="requestFilterDepartment" placeholder="部门"></label><label>开始日期<input id="requestFilterFrom" type="date"></label><label>结束日期<input id="requestFilterTo" type="date"></label><div class="batch-actions"><button class="secondary-button" id="requestFilterApply" type="button">组合筛选</button><button class="text-button" id="requestFilterReset" type="button">重置</button></div></div>
           <div class="data-list request-list soft-data-list">
             <div class="data-list-head"><span></span><span>请求主题</span><span>用途说明</span><span>提出时间</span><span>SQL 版本</span><span>状态</span></div>
@@ -361,6 +369,7 @@
             <div><strong id="ledgerPendingSteps">0</strong><span>待办步骤</span></div>
           </div>
           <div class="list-toolbar soft-list-toolbar soft-ledger-toolbar">
+            <div class="inline-search wide"><svg><use href="#i-search"/></svg><input id="ledgerSearch" placeholder="搜索监管项、规划、逻辑或模型"></div>
             <div class="filter-tabs" id="ledgerCategoryFilters">
               <button class="active" type="button" data-ledger-category="all">全部</button>
               <button type="button" data-ledger-category="员工监管类">员工监管类</button>
@@ -373,7 +382,6 @@
               <button type="button" data-ledger-focus="attention">待关注</button>
               <button type="button" data-ledger-focus="with_model">已绑模型</button>
             </div>
-            <div class="inline-search wide"><svg><use href="#i-search"/></svg><input id="ledgerSearch" placeholder="搜索监管项、规划、逻辑或模型"></div>
             <span class="soft-result-hint" id="ledgerResultHint">0 项</span>
           </div>
           <div class="soft-ledger-board" id="projectBoard"></div>
@@ -1049,7 +1057,7 @@
     </div>
   </div>
   <datalist id="entityRelationOptions"></datalist>
-  <script src="app.js?v=1.9.43"></script>
+  <script src="app.js?v=1.9.44"></script>
 </body>
 </html>
 

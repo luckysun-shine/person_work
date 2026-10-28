@@ -821,16 +821,7 @@ function renderTodayTasks() {
   if (!state.focusTasks.length) list.append(make('p', 'empty-state', '今天没有待办。可以新建任务，或去周计划里排期。'));
   const attentionCount = summary.nudge_count || (state.focusNudges || []).length
     || state.focusTasks.filter(task => task.needs_nudge).length;
-  const headline = $('#todayHeadline');
-  if (headline) {
-    headline.textContent = summary.overdue
-      ? '先清掉逾期事项'
-      : attentionCount
-        ? '先处理催办事项'
-        : summary.total
-          ? '早上好，准备开工'
-          : '今天可以整理与复盘';
-  }
+  applyTodayGreeting();
   if ($('#todayAttentionCount')) {
     $('#todayAttentionCount').textContent = `${attentionCount} 项需要催办`;
   }
@@ -1022,6 +1013,50 @@ async function refreshHomeWeekCalendar() {
   renderHomeWeekCalendar();
 }
 
+function daypartCopy(now = new Date()) {
+  const hour = now.getHours();
+  if (hour >= 5 && hour < 11) return { hello: '早上好', work: '准备开工', idle: '可以整理与复盘' };
+  if (hour >= 11 && hour < 13) return { hello: '中午好', work: '把上午收一收', idle: '可以整理与复盘' };
+  if (hour >= 13 && hour < 18) return { hello: '下午好', work: '继续推进', idle: '可以整理与复盘' };
+  if (hour >= 18 && hour < 22) return { hello: '晚上好', work: '收个尾再走', idle: '可以整理与复盘' };
+  return { hello: '夜深了', work: '先看紧急事项', idle: '适合收尾，明天再开工' };
+}
+
+function applyTodayGreeting() {
+  const headline = $('#todayHeadline');
+  if (!headline) return;
+  const summary = state.focusSummary || {};
+  const attentionCount = summary.nudge_count || (state.focusNudges || []).length
+    || (state.focusTasks || []).filter(task => task.needs_nudge).length;
+  const { hello, work, idle } = daypartCopy();
+  headline.textContent = summary.overdue
+    ? `${hello}，先清掉逾期事项`
+    : attentionCount
+      ? `${hello}，先处理催办事项`
+      : summary.total
+        ? `${hello}，${work}`
+        : `${hello}，${idle}`;
+}
+
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+function tickHomeClock() {
+  const now = new Date();
+  const timeEl = $('#todayClockTime');
+  const dateEl = $('#todayClockDate');
+  if (timeEl) timeEl.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+  if (dateEl) {
+    const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    dateEl.textContent = `${now.getMonth() + 1}月${now.getDate()}日 ${weekdayNames[now.getDay()]}`;
+  }
+  if (state._greetHour !== now.getHours()) {
+    state._greetHour = now.getHours();
+    applyTodayGreeting();
+  }
+}
+
 function updateCurrentDateLabels() {
   const now = new Date();
   const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -1033,6 +1068,7 @@ function updateCurrentDateLabels() {
   firstThursday.setDate(firstThursday.getDate() + 4 - (firstThursday.getDay() || 7));
   const weekNumber = 1 + Math.round((weekStart - firstThursday) / 604800000);
   $('#view-today .eyebrow').textContent = `今天 · 第 ${weekNumber} 周`;
+  tickHomeClock();
 }
 
 function taskTypeLabel(type) {
@@ -5262,4 +5298,5 @@ async function bootstrapApi() {
 applyHomeLayout(state.homeLayout);
 wireHomeLayoutDrag();
 updateCurrentDateLabels(); renderSavedNotes(); renderWeekBoard(); renderTodayTasks(); renderTodayProjects(); renderTodayRequests(); renderTodaySqlHome(); renderTodayModelsHome(); renderTodayNotesHome(); renderHomeWeekCalendar(); updateBatchButtons(); bootstrapApi();
+setInterval(tickHomeClock, 1000);
 window.addEventListener('resize', () => applyHomeLayout(state.homeLayout));
