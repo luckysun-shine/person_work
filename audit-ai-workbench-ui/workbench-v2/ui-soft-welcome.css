@@ -47,6 +47,159 @@ body.theme-soft-welcome {
   color: var(--hig-label);
 }
 
+body.theme-soft-welcome.is-booting,
+body.theme-soft-welcome.is-locked {
+  overflow: hidden;
+}
+body.theme-soft-welcome.is-booting .app-shell,
+body.theme-soft-welcome.is-locked .app-shell,
+body.theme-soft-welcome.is-booting .mobile-tabbar,
+body.theme-soft-welcome.is-locked .mobile-tabbar,
+body.theme-soft-welcome.is-booting .toast,
+body.theme-soft-welcome.is-locked .toast {
+  display: none !important;
+}
+
+body.theme-soft-welcome .access-gate {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top, 0px)) 20px max(24px, env(safe-area-inset-bottom, 0px));
+  background:
+    radial-gradient(1200px 700px at 18% -10%, #FFF6D4 0%, transparent 55%),
+    radial-gradient(900px 600px at 100% 20%, #F3E7C8 0%, transparent 50%),
+    var(--sw-page);
+}
+body.theme-soft-welcome.is-booting .access-gate,
+body.theme-soft-welcome.is-locked .access-gate {
+  display: grid;
+}
+body.theme-soft-welcome .access-gate-panel {
+  width: min(420px, 100%);
+  padding: 36px 32px 28px;
+  border: 1px solid var(--hig-separator);
+  border-radius: 28px;
+  background: var(--sw-card);
+  box-shadow: var(--hig-card-shadow);
+}
+body.theme-soft-welcome .access-gate-brand {
+  text-align: center;
+}
+body.theme-soft-welcome .access-gate-brand .brand-mark {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  border-radius: 18px;
+}
+body.theme-soft-welcome .access-gate-brand .eyebrow {
+  margin: 0 0 8px;
+  letter-spacing: .14em;
+}
+body.theme-soft-welcome .access-gate-brand h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -.03em;
+  font-weight: 800;
+}
+body.theme-soft-welcome .access-gate-lead,
+body.theme-soft-welcome .access-gate-status,
+body.theme-soft-welcome .access-gate-hint,
+body.theme-soft-welcome .access-gate-foot {
+  margin: 0;
+  color: var(--hig-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+body.theme-soft-welcome .access-gate-status {
+  margin-top: 28px;
+  text-align: center;
+}
+body.theme-soft-welcome .access-gate-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+}
+body.theme-soft-welcome .access-field {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+body.theme-soft-welcome .access-field > span {
+  color: var(--hig-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+body.theme-soft-welcome .access-field-control {
+  position: relative;
+}
+body.theme-soft-welcome .access-field-control input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 44px 0 14px;
+  border: 1px solid var(--hig-separator);
+  border-radius: 16px;
+  background: #FAF6EC;
+  color: var(--sw-ink);
+  font-size: 15px;
+}
+body.theme-soft-welcome .access-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--hig-tertiary);
+  transform: translateY(-50%);
+}
+body.theme-soft-welcome .access-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+body.theme-soft-welcome .access-toggle .icon-hide,
+body.theme-soft-welcome .access-toggle.is-on .icon-show {
+  display: none;
+}
+body.theme-soft-welcome .access-toggle.is-on .icon-hide {
+  display: block;
+}
+body.theme-soft-welcome .access-gate-error {
+  margin: 0;
+  color: var(--hig-red);
+  font-size: 13px;
+  font-weight: 600;
+}
+body.theme-soft-welcome .access-submit {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+body.theme-soft-welcome .access-submit:disabled {
+  opacity: .55;
+  filter: none;
+  cursor: not-allowed;
+}
+body.theme-soft-welcome .access-gate-foot {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--hig-tertiary);
+}
+
 body.theme-soft-welcome .ambient { display: none; }
 
 /* ——— Shell: top chrome instead of left sidebar ——— */
@@ -3790,6 +3943,22 @@ body.theme-soft-welcome .mobile-tabbar {
   body.theme-soft-welcome .form-grid .span-2,
   body.theme-soft-welcome .modal-form-grid .span-2 {
     grid-column: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  body.theme-soft-welcome .access-gate {
+    align-items: stretch;
+    padding: max(20px, env(safe-area-inset-top, 0px)) 16px max(20px, env(safe-area-inset-bottom, 0px));
+  }
+  body.theme-soft-welcome .access-gate-panel {
+    width: 100%;
+    margin: auto 0;
+    padding: 28px 20px 22px;
+    border-radius: 24px;
+  }
+  body.theme-soft-welcome .access-gate-brand h1 {
+    font-size: 24px;
   }
 }
 

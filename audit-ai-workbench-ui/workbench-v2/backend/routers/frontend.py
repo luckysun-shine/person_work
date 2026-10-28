@@ -50,6 +50,6 @@ def frontend() -> FileResponse:
 
 @router.get("/{path:path}", include_in_schema=False)
 def frontend_fallback(path: str) -> FileResponse:
-    if path.startswith("api/") or Path(path).suffix:
+    if path.startswith(("api/", "mcp")) or Path(path).suffix:
         raise HTTPException(status_code=404, detail="资源不存在")
     return FileResponse(PROJECT_DIR / "index.html")

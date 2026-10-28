@@ -8,6 +8,7 @@ services:
       WORKBENCH_SECRET: ${WORKBENCH_SECRET:-change-me-in-production}
       WORKBENCH_HOST: 0.0.0.0
       WORKBENCH_PORT: "8765"
+      WORKBENCH_MCP_TOKEN: ${WORKBENCH_MCP_TOKEN:-}
     volumes:
       - workbench-data:/data
     restart: unless-stopped

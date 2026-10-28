@@ -4719,39 +4719,148 @@ async function refreshTodayCalendar() {
   if (!state._bootstrapping) await refreshHomeWeekCalendar();
 }
 
+let accessUnlockResolver = null;
+let accessLockTimer = null;
+
+function hideAccessGate() {
+  document.body.classList.remove('is-booting', 'is-locked');
+  $('#accessGate')?.setAttribute('aria-hidden', 'true');
+  if (accessLockTimer) {
+    clearInterval(accessLockTimer);
+    accessLockTimer = null;
+  }
+}
+
+function showAccessGate(mode = 'login') {
+  document.body.classList.toggle('is-booting', mode === 'boot');
+  document.body.classList.toggle('is-locked', mode === 'login');
+  $('#accessGate')?.setAttribute('aria-hidden', mode === 'login' ? 'false' : 'true');
+  const form = $('#accessForm');
+  const status = $('#accessGateStatus');
+  if (form) form.hidden = mode !== 'login';
+  if (status) status.hidden = mode === 'login';
+  if (mode === 'login') {
+    requestAnimationFrame(() => $('#accessUnlockPassword')?.focus());
+  }
+}
+
+function setAccessUnlockError(message) {
+  const errNode = $('#accessUnlockError');
+  if (!errNode) return;
+  errNode.hidden = !message;
+  errNode.textContent = message || '';
+}
+
+function setAccessLocked(seconds) {
+  const submit = $('#accessUnlockSubmit');
+  const input = $('#accessUnlockPassword');
+  const hint = $('#accessUnlockHint');
+  const locked = Number(seconds) > 0;
+  if (accessLockTimer) {
+    clearInterval(accessLockTimer);
+    accessLockTimer = null;
+  }
+  const render = remain => {
+    if (hint) {
+      hint.textContent = remain > 0
+        ? `尝试过多，请 ${remain} 秒后再试。`
+        : '输入访问密码进入工作台。连续失败会被短暂锁定。';
+    }
+  };
+  if (submit) submit.disabled = locked;
+  if (input) input.disabled = locked;
+  render(Number(seconds) || 0);
+  if (!locked) return;
+  let remain = Number(seconds);
+  accessLockTimer = setInterval(() => {
+    remain -= 1;
+    if (remain <= 0) {
+      clearInterval(accessLockTimer);
+      accessLockTimer = null;
+      if (submit) submit.disabled = false;
+      if (input) {
+        input.disabled = false;
+        input.focus();
+      }
+      render(0);
+      return;
+    }
+    render(remain);
+  }, 1000);
+}
+
+function wireAccessGate() {
+  const form = $('#accessForm');
+  const toggle = $('#accessTogglePassword');
+  const input = $('#accessUnlockPassword');
+  if (toggle && input && !toggle.dataset.wired) {
+    toggle.dataset.wired = '1';
+    toggle.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      toggle.classList.toggle('is-on', show);
+      toggle.setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
+    });
+  }
+  if (form && !form.dataset.wired) {
+    form.dataset.wired = '1';
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const submit = $('#accessUnlockSubmit');
+      const password = input?.value || '';
+      if (!password || submit?.disabled) return;
+      const original = submit?.textContent || '进入工作台';
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = '正在进入…';
+      }
+      setAccessUnlockError('');
+      try {
+        const unlocked = await apiRequest('/api/access/unlock', {
+          method: 'POST',
+          body: JSON.stringify({ password }),
+        });
+        if (unlocked?.token) sessionStorage.setItem('workbench_access', unlocked.token);
+        hideAccessGate();
+        if (unlocked?.expires_at) showToast(`已解锁，会话至 ${formatDate(unlocked.expires_at)}`);
+        accessUnlockResolver?.(true);
+        accessUnlockResolver = null;
+      } catch (error) {
+        setAccessUnlockError(error.message);
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = original;
+        }
+        const match = String(error.message).match(/(\d+)\s*秒/);
+        if (match) setAccessLocked(Number(match[1]));
+        input?.select();
+        input?.focus();
+      }
+    });
+  }
+}
+
 async function ensureAccessUnlocked() {
+  wireAccessGate();
   try {
     const status = await apiRequest('/api/access/status');
     if (status.required && !status.unlocked) {
+      const days = status.session_days || 14;
+      showAccessGate('login');
       const hint = $('#accessUnlockHint');
-      if (hint) {
-        hint.textContent = status.locked
-          ? `尝试过多，请 ${status.lock_remaining_seconds || 0} 秒后再试。`
-          : `此工作台已启用访问保护；会话约 ${status.session_days || 14} 天，连续失败会被短暂锁定。`;
+      if (hint && !status.locked) {
+        hint.textContent = `输入访问密码进入工作台。解锁后会话约 ${days} 天，连续失败会被短暂锁定。`;
       }
-      const errNode = $('#accessUnlockError');
-      if (errNode) { errNode.hidden = true; errNode.textContent = ''; }
-      openModal($('#accessModal'));
+      const foot = $('#accessGateFoot');
+      if (foot) foot.textContent = `解锁后会话约 ${days} 天 · 仅此浏览器保存`;
+      setAccessUnlockError('');
+      setAccessLocked(status.locked ? (status.lock_remaining_seconds || 0) : 0);
       return new Promise(resolve => {
-        const form = $('#accessForm');
-        const handler = async event => {
-          event.preventDefault();
-          try {
-            const unlocked = await apiRequest('/api/access/unlock', { method: 'POST', body: JSON.stringify({ password: $('#accessUnlockPassword').value }) });
-            if (unlocked?.token) sessionStorage.setItem('workbench_access', unlocked.token);
-            form.removeEventListener('submit', handler);
-            closeModal($('#accessModal'));
-            if (unlocked?.expires_at) showToast(`已解锁，会话至 ${formatDate(unlocked.expires_at)}`);
-            resolve(true);
-          } catch (error) {
-            if (errNode) { errNode.hidden = false; errNode.textContent = error.message; }
-            showToast(error.message);
-          }
-        };
-        form.addEventListener('submit', handler);
+        accessUnlockResolver = resolve;
       });
     }
   } catch (_) {}
+  hideAccessGate();
   return true;
 }
 
@@ -5232,6 +5341,7 @@ async function bootstrapApi() {
     const health = await apiRequest('/api/health');
     state.apiAvailable = true;
     if (health.access_required) await ensureAccessUnlocked();
+    else hideAccessGate();
     $('.sidebar-foot strong').textContent = '本地数据库已连接';
     $('.sidebar-foot small').textContent = health.ai_ready ? 'AI 已就绪' : 'AI 未启用或未配置';
     const [notes, requests, sqlAssets, procedures, models, projects, navigation, reportTemplates, genericReports, projectTemplates] = await Promise.all([
@@ -5281,6 +5391,7 @@ async function bootstrapApi() {
       try { await refreshTodayTasks(); showToast('催办已刷新'); } catch (error) { showToast(error.message); }
     });
   } catch (_) {
+    hideAccessGate();
     state.apiAvailable = false;
     $('.sidebar-foot strong').textContent = '离线演示模式';
     $('.sidebar-foot small').textContent = '启动后端后自动连接';

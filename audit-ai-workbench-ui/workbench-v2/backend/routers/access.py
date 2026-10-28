@@ -17,6 +17,11 @@ def health() -> dict:
         "access_required": C.access_password_required(),
         "ai_ready": C.public_ai_settings()["ready"],
         "secret_warning": C.secret_warning(),
+        "mcp": {
+            "enabled": C.mcp_token_configured(),
+            "path": "/mcp",
+            "transport": "streamable-http",
+        },
         "backups": {
             "count": len(backups),
             "latest": latest,

@@ -1,5 +1,7 @@
 import unittest
 import asyncio
+import json
+import os
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -1031,6 +1033,76 @@ class ApiTestCase(unittest.TestCase):
         )
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.json()["home_layout"], ["quick", "tasks", "requests", "projects"])
+
+    def test_mcp_streamable_http_tools(self):
+        old = os.environ.pop("WORKBENCH_MCP_TOKEN", None)
+        try:
+            disabled = self.client.get("/mcp")
+            self.assertEqual(disabled.status_code, 503)
+            os.environ["WORKBENCH_MCP_TOKEN"] = "mcp-test-token"
+            denied = self.client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+            self.assertEqual(denied.status_code, 401)
+            headers = {"Authorization": "Bearer mcp-test-token"}
+            opened = self.client.get("/mcp", headers=headers)
+            self.assertEqual(opened.status_code, 200)
+            self.assertEqual(opened.json()["transport"], "streamable-http")
+            initialized = self.client.post(
+                "/mcp",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "0"},
+                    },
+                },
+            )
+            self.assertEqual(initialized.status_code, 200)
+            self.assertEqual(initialized.json()["result"]["serverInfo"]["name"], "数智审监工作台")
+            listed = self.client.post(
+                "/mcp",
+                headers=headers,
+                json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            )
+            names = {item["name"] for item in listed.json()["result"]["tools"]}
+            self.assertIn("get_today", names)
+            self.assertIn("create_task", names)
+            today = self.client.post(
+                "/mcp",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {"name": "get_today", "arguments": {}},
+                },
+            )
+            today_text = json.loads(today.json()["result"]["content"][0]["text"])
+            self.assertIn("summary", today_text)
+            created = self.client.post(
+                "/mcp",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "create_task",
+                        "arguments": {"title": "MCP 新建任务", "priority": "high", "planned_date": "2099-01-05"},
+                    },
+                },
+            )
+            created_task = json.loads(created.json()["result"]["content"][0]["text"])
+            self.assertEqual(created_task["title"], "MCP 新建任务")
+            self.assertFalse(created.json()["result"]["isError"])
+        finally:
+            if old is None:
+                os.environ.pop("WORKBENCH_MCP_TOKEN", None)
+            else:
+                os.environ["WORKBENCH_MCP_TOKEN"] = old
 
 
 if __name__ == "__main__":

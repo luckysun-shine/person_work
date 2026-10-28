@@ -24,13 +24,39 @@ NOTE_TAGS = (
     "模型", "数据请求", "口径", "风险", "数据质量", "规则变更", "项目复盘",
 )
 
-APP_VERSION = "1.9.33"
+APP_VERSION = "1.9.34"
 
 ACCESS_COOKIE = "workbench_access"
 PUBLIC_API_PREFIXES = (
     "/api/health",
     "/api/access/",
 )
+
+
+def mcp_token() -> str:
+    return (os.environ.get("WORKBENCH_MCP_TOKEN") or "").strip()
+
+
+def mcp_token_configured() -> bool:
+    return bool(mcp_token())
+
+
+def mcp_token_valid(provided: str | None) -> bool:
+    expected = mcp_token()
+    if not expected or provided is None:
+        return False
+    left = hashlib.sha256(provided.encode("utf-8")).digest()
+    right = hashlib.sha256(expected.encode("utf-8")).digest()
+    return hmac.compare_digest(left, right)
+
+
+def bearer_token(authorization: str | None) -> str:
+    if not authorization:
+        return ""
+    scheme, _, value = authorization.partition(" ")
+    if scheme.lower() != "bearer":
+        return ""
+    return value.strip()
 
 
 def hash_password(password: str) -> str:

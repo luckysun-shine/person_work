@@ -1,4 +1,4 @@
-# 数智审监工作台 V2（v1.9.33）
+# 数智审监工作台 V2（v1.9.34）
 
 面向审计监察数据分析师的本地单用户工作台，围绕以下工作闭环组织：
 
@@ -82,7 +82,37 @@ docker compose up -d --build
 
 完整列表见运行后的 `/docs`。
 
+## MCP（Cursor / Grok Bot）
+
+工作台在同一端口提供 Streamable HTTP MCP，供智能体查询计划与台账。默认关闭，设置环境变量后启用：
+
+```powershell
+$env:WORKBENCH_MCP_TOKEN = "请换成足够长的随机口令"
+```
+
+- 地址：`http://<主机>:8765/mcp`
+- 鉴权：`Authorization: Bearer <WORKBENCH_MCP_TOKEN>`
+- 传输：Streamable HTTP（JSON-RPC `initialize` / `tools/list` / `tools/call`）
+- 工具：`get_today`、`get_week_plan`、`search_workbench`、`get_ledger_attention`、`get_open_requests`、`get_task`、`get_note`、`get_project`、`create_task`、`complete_task`、`add_note`
+- 不返回 SQL 正文、备份、密码或密钥
+
+Cursor 本机可直接填上述地址。Grok Bot 需要公网 HTTPS（家里 NAS 可用 Cloudflare Tunnel 等把 `/mcp` 暴露出去）；公司内网通常打不出隧道，那时请用 Cursor 走局域网。
+
+Docker：
+
+```powershell
+$env:WORKBENCH_SECRET = "请替换为随机密钥"
+$env:WORKBENCH_MCP_TOKEN = "请换成足够长的随机口令"
+docker compose up -d --build
+```
+
 ## 版本记录
+
+### v1.9.34
+
+- 新增 `/mcp` Streamable HTTP 服务，Bearer Token 鉴权，可供 Cursor 与后期 Grok Bot 连接。
+- 登录由简陋弹窗改为整页访问门；首页按时段问候并在右侧显示时钟。
+- 手机端布局、筛选栏与搜索框继续按窄屏操作习惯收紧。
 
 ### v1.9.33
 
