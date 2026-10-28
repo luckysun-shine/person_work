@@ -100,6 +100,26 @@ async function apiRequest(path, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
+async function apiUpload(path, file) {
+  const headers = {};
+  const token = sessionStorage.getItem('workbench_access');
+  if (token) headers['X-Workbench-Access'] = token;
+  const body = new FormData();
+  body.append('file', file);
+  const response = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers,
+    body,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: '请求失败' }));
+    throw new Error(formatApiError(error, response.status));
+  }
+  return response.json();
+}
+
 function splitValues(value) {
   return value.split(/[,，]/).map(item => item.trim()).filter(Boolean);
 }
@@ -4422,22 +4442,98 @@ function updateDataHealthSummary() {
   }
 }
 
+function formatBackupCounts(counts = {}) {
+  const labels = {
+    tasks: '任务', data_requests: '请求', sql_assets: 'SQL',
+    projects: '台账', work_notes: '记录', monitoring_models: '模型',
+  };
+  const parts = Object.entries(labels)
+    .filter(([key]) => Number(counts[key] || 0) > 0)
+    .map(([key, label]) => `${label} ${counts[key]}`);
+  return parts.join(' · ') || '空库';
+}
+
+function mergeSummaryText(preview) {
+  const summary = preview?.summary || {};
+  return `新增 ${summary.new || 0}，更新 ${summary.updated || 0}，不变 ${summary.unchanged || 0}`;
+}
+
+async function mergeBackupIntoCurrent(name, { skipConfirm = false } = {}) {
+  const preview = await apiRequest(`/api/backups/${encodeURIComponent(name)}/merge-preview`, {
+    method: 'POST',
+    body: JSON.stringify({ mode: 'merge' }),
+  });
+  if (!skipConfirm) {
+    const ok = await showConfirm({
+      title: '合并同步',
+      message: `将把 ${name} 合并到当前库：${mergeSummaryText(preview)}。访问密码和 AI 密钥不会被覆盖。当前库会先自动备份。`,
+      confirmText: '合并',
+    });
+    if (!ok) return false;
+  }
+  const result = await apiRequest(`/api/backups/${encodeURIComponent(name)}/merge`, {
+    method: 'POST',
+    body: JSON.stringify({ mode: 'merge' }),
+  });
+  showToast(`已合并同步，安全备份 ${result.safety_backup}`);
+  setTimeout(() => location.reload(), 800);
+  return true;
+}
+
+async function importBackupFile(file) {
+  const status = $('#backupImportStatus');
+  try {
+    if (status) status.textContent = `正在校验 ${file.name}…`;
+    const imported = await apiUpload('/api/backups/import', file);
+    await refreshBackups();
+    const counts = formatBackupCounts(imported.counts);
+    const preview = await apiRequest(`/api/backups/${encodeURIComponent(imported.name)}/merge-preview`, {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'merge' }),
+    });
+    if (status) {
+      status.textContent = `已导入 ${imported.name}（${counts}）。与当前库对比：${mergeSummaryText(preview)}。`;
+    }
+    const mergeNow = await showConfirm({
+      title: '备份已导入',
+      message: `文件已加入备份列表（${counts}）。与当前库对比：${mergeSummaryText(preview)}。立即合并到当前库？访问密码和 AI 密钥不会被覆盖。也可以稍后点「合并同步」或「整库恢复」。`,
+      confirmText: '立即合并',
+      cancelText: '仅保存备份',
+    });
+    if (mergeNow) {
+      await mergeBackupIntoCurrent(imported.name, { skipConfirm: true });
+      return;
+    }
+    showToast('备份已导入，可稍后合并或整库恢复');
+  } catch (error) {
+    if (status) status.textContent = error.message;
+    showToast(error.message);
+  }
+}
+
 function renderBackups() {
   const list = $('#backupList');
   if (!list) return;
   list.replaceChildren();
   state.backups.forEach((backup, index) => {
     const row = make('div', `backup-row${index === 0 ? ' is-latest' : ''}`);
-    const mark = make('span', 'backup-mark', index === 0 ? '新' : '库');
+    const imported = String(backup.name || '').includes('-imported');
+    const mark = make('span', 'backup-mark', index === 0 ? '新' : (imported ? '入' : '库'));
     const copy = make('span', 'backup-copy');
     copy.append(
       make('strong', '', backup.name),
-      make('small', '', `${formatBytes(backup.size)} · ${formatDate(backup.created_at)}`),
+      make('small', '', `${formatBytes(backup.size)} · ${formatDate(backup.created_at)}${imported ? ' · 导入' : ''}`),
     );
     const actions = make('span', 'backup-actions');
     const download = make('button', 'secondary-button', '下载');
     download.type = 'button';
     download.addEventListener('click', () => downloadData(`/api/backups/${encodeURIComponent(backup.name)}/download`));
+    const merge = make('button', 'secondary-button', '合并同步');
+    merge.type = 'button';
+    merge.addEventListener('click', async () => {
+      try { await mergeBackupIntoCurrent(backup.name); }
+      catch (error) { showToast(error.message); }
+    });
     const restoreTables = make('button', 'secondary-button', '按表恢复');
     restoreTables.type = 'button';
     restoreTables.addEventListener('click', () => openTableRestoreModal(backup.name));
@@ -4461,12 +4557,12 @@ function renderBackups() {
         showToast('备份已删除');
       } catch (error) { showToast(error.message); }
     });
-    actions.append(download, restoreTables, restore, remove);
+    actions.append(download, merge, restoreTables, restore, remove);
     row.append(mark, copy, actions);
     list.append(row);
   });
   if (!state.backups.length) {
-    list.append(make('p', 'empty-state', '还没有备份，建议在首次导入前创建一个。'));
+    list.append(make('p', 'empty-state', '还没有备份。可先立即备份，或导入另一台电脑下载的 .db 文件。'));
   }
   updateDataHealthSummary();
 }
@@ -4874,6 +4970,11 @@ $('#createBackupButton').addEventListener('click', async () => {
   catch (error) { showToast(error.message); }
 });
 $('#refreshBackupsButton').addEventListener('click', refreshBackups);
+$('#backupImportFile')?.addEventListener('change', event => {
+  const [file] = event.target.files || [];
+  if (file) importBackupFile(file);
+  event.target.value = '';
+});
 $('#saveSettingsButton').addEventListener('click', async () => {
   try {
     state.settings = await apiRequest('/api/settings', {

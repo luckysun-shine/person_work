@@ -417,6 +417,11 @@ class TableRestorePayload(BaseModel):
     tables: list[str] = Field(min_length=1, max_length=40)
 
 
+class BackupMergePayload(BaseModel):
+    mode: Literal["insert_only", "merge"] = "merge"
+    tables: list[str] | None = None
+
+
 class AISettingsUpdate(BaseModel):
     enabled: bool | None = None
     base_url: str | None = Field(default=None, max_length=500)

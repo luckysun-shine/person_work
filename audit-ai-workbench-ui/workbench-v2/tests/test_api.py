@@ -92,6 +92,51 @@ class ApiTestCase(unittest.TestCase):
         after = self.client.get("/api/projects/P-001").json()["project"]["progress"]
         self.assertEqual(after, before)
 
+    def test_backup_import_and_merge_sync(self):
+        original_title = self.client.get("/api/tasks/T-001").json()["title"]
+        created = self.client.post("/api/backups")
+        self.assertEqual(created.status_code, 201)
+        downloaded = self.client.get(f"/api/backups/{created.json()['name']}/download")
+        self.assertEqual(downloaded.status_code, 200)
+
+        self.client.patch("/api/tasks/T-001", json={"title": "应被合并覆盖的标题"})
+        imported = self.client.post(
+            "/api/backups/import",
+            files={"file": ("from-other-machine.db", downloaded.content, "application/vnd.sqlite3")},
+        )
+        self.assertEqual(imported.status_code, 201)
+        imported_name = imported.json()["name"]
+        self.assertTrue(imported_name.endswith("-imported.db"))
+        self.assertGreaterEqual(imported.json()["counts"]["tasks"], 1)
+        listing = self.client.get("/api/backups").json()
+        self.assertIn(imported_name, [item["name"] for item in listing])
+
+        preview = self.client.post(
+            f"/api/backups/{imported_name}/merge-preview",
+            json={"mode": "merge"},
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertGreaterEqual(preview.json()["summary"]["updated"] + preview.json()["summary"]["unchanged"], 1)
+        self.assertIn("app_settings", preview.json()["skipped_tables"])
+
+        merged = self.client.post(
+            f"/api/backups/{imported_name}/merge",
+            json={"mode": "merge"},
+        )
+        self.assertEqual(merged.status_code, 200)
+        self.assertEqual(self.client.get("/api/tasks/T-001").json()["title"], original_title)
+
+        bad = self.client.post(
+            "/api/backups/import",
+            files={"file": ("notes.txt", b"not a database", "text/plain")},
+        )
+        self.assertEqual(bad.status_code, 400)
+        wrong_ext = self.client.post(
+            "/api/backups/import",
+            files={"file": ("export.json", b"{}", "application/json")},
+        )
+        self.assertEqual(wrong_ext.status_code, 400)
+
     def test_unified_search_and_data_exchange(self):
         search = self.client.get("/api/search", params={"q": "采购付款"})
         self.assertEqual(search.status_code, 200)

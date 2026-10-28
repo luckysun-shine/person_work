@@ -4,7 +4,7 @@
 
 `工作请求 → 周计划 / 日程 → SQL 取数 → 模型维护 → 审监监测台账 → 记录复盘 → 周报输出`
 
-正式应用位于 [`audit-ai-workbench-ui/workbench-v2`](audit-ai-workbench-ui/workbench-v2)，当前版本 **v1.9.34**。
+正式应用位于 [`audit-ai-workbench-ui/workbench-v2`](audit-ai-workbench-ui/workbench-v2)，当前版本 **v1.9.35**。
 
 界面主题：**Soft Welcome**（固定浅色）。同一套页面同时适配 **电脑浏览器** 与 **手机浏览器**（底部快捷栏 + 抽屉导航）。
 
@@ -61,7 +61,7 @@ docker compose up -d --build
 - 审监监测台账：总览指标、统一「待关注」口径、模型绑定 / 运行记录 / 复核、更新步骤与执行记录
 - 数据请求独立存档与 SQL 多版本；本周计划与日程同列、拖动改期、周复盘
 - Soft Welcome 响应式：电脑侧栏导航 / 手机底栏+抽屉
-- FastAPI + SQLite；备份恢复；钉钉 CalDAV / ICS；可选访问密码
+- FastAPI + SQLite；备份导入/合并同步/恢复；钉钉 CalDAV / ICS；可选访问密码
 - MCP（`/mcp`，Bearer Token）：给 Cursor / 后期 Grok Bot 查询今日、周计划、台账与轻量写入
 - **不连接、不执行**真实业务库 SQL
 

@@ -1,16 +1,17 @@
 """API routes: data."""
 from datetime import date, datetime, timedelta
+from pathlib import Path
 import csv
 import io
 import json
 import sqlite3
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 
 from .. import common as C
-from ..db import connect, init_db, row_to_dict, transaction, utc_now
-from ..schemas import CsvImportPayload, DataImportPayload, TableRestorePayload
+from ..db import connect, init_db, transaction, utc_now
+from ..schemas import BackupMergePayload, CsvImportPayload, DataImportPayload, TableRestorePayload
 
 router = APIRouter(tags=["data"])
 
@@ -56,6 +57,35 @@ def create_backup() -> dict:
     removed = C.prune_backups()
     info["retention"] = int(C.get_setting("backup_retention", 20) or 20)
     info["pruned"] = removed
+    return info
+
+
+@router.post("/api/backups/import", status_code=status.HTTP_201_CREATED)
+def import_backup_file(file: UploadFile = File(...)) -> dict:
+    filename = file.filename or "imported.db"
+    if not filename.lower().endswith(".db"):
+        raise HTTPException(status_code=400, detail="请上传 .db 备份文件")
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file.file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > C.MAX_BACKUP_UPLOAD_BYTES:
+            raise HTTPException(status_code=400, detail="备份文件超过 200MB 上限")
+        chunks.append(chunk)
+    path = C.save_uploaded_backup(b"".join(chunks), filename)
+    info = C.backup_info(path)
+    validation = C.validate_sqlite_backup(path)
+    removed = C.prune_backups()
+    info.update({
+        "imported": True,
+        "original_name": Path(filename).name,
+        "counts": validation["counts"],
+        "pruned": removed,
+        "retention": int(C.get_setting("backup_retention", 20) or 20),
+    })
     return info
 
 
@@ -108,13 +138,7 @@ def download_backup(name: str) -> FileResponse:
 @router.post("/api/backups/{name}/restore")
 def restore_backup(name: str) -> dict:
     backup_path = C.resolve_backup(name)
-    validation = sqlite3.connect(backup_path)
-    try:
-        tables = {row[0] for row in validation.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
-    finally:
-        validation.close()
-    if not {"tasks", "sql_assets", "projects"}.issubset(tables):
-        raise HTTPException(status_code=400, detail="备份结构不完整，已拒绝恢复")
+    C.validate_sqlite_backup(backup_path)
     safety = C.create_database_backup("before-restore")
     source = sqlite3.connect(backup_path)
     target = connect()
@@ -162,55 +186,35 @@ def restore_backup_tables(name: str, payload: TableRestorePayload) -> dict:
     return {"restored_tables": restored, "safety_backup": safety.name, "backup": name}
 
 
+@router.post("/api/backups/{name}/merge-preview")
+def preview_backup_merge(name: str, payload: BackupMergePayload = BackupMergePayload()) -> dict:
+    path = C.resolve_backup(name)
+    C.validate_sqlite_backup(path)
+    tables = C.extract_tables_from_backup(path, payload.tables)
+    result = C.preview_import_tables(tables, payload.mode)
+    result["backup"] = name
+    result["skipped_tables"] = sorted(C.BACKUP_MERGE_SKIP_TABLES)
+    return result
+
+
+@router.post("/api/backups/{name}/merge")
+def merge_backup(name: str, payload: BackupMergePayload = BackupMergePayload()) -> dict:
+    path = C.resolve_backup(name)
+    C.validate_sqlite_backup(path)
+    tables = C.extract_tables_from_backup(path, payload.tables)
+    if not tables:
+        raise HTTPException(status_code=400, detail="备份中没有可合并的数据表")
+    result = C.import_tables(tables, payload.mode)
+    result["backup"] = name
+    result["skipped_tables"] = sorted(C.BACKUP_MERGE_SKIP_TABLES)
+    return result
+
+
 @router.post("/api/data/import/preview")
 def preview_import(payload: DataImportPayload) -> dict:
-    unknown = set(payload.tables) - set(C.EXPORT_TABLES)
-    if unknown:
-        raise HTTPException(status_code=400, detail=f"包含不支持的数据表：{', '.join(sorted(unknown))}")
-    connection = connect()
-    diffs: dict[str, dict] = {}
-    try:
-        for table, rows in payload.tables.items():
-            new_ids: list[str] = []
-            updated_ids: list[str] = []
-            unchanged_ids: list[str] = []
-            for source_row in rows:
-                row = C.normalize_import_row(connection, table, source_row)
-                existing = connection.execute(f"SELECT * FROM {table} WHERE id = ?", (row["id"],)).fetchone()
-                if not existing:
-                    new_ids.append(row["id"])
-                    continue
-                existing_dict = row_to_dict(existing)
-                existing_normalized = C.normalize_import_row(connection, table, existing_dict)
-                if C.comparable_row(existing_normalized) == C.comparable_row(row):
-                    unchanged_ids.append(row["id"])
-                else:
-                    updated_ids.append(row["id"])
-            diffs[table] = {
-                "incoming": len(rows),
-                "new": len(new_ids),
-                "updated": len(updated_ids),
-                "unchanged": len(unchanged_ids),
-                "sample_new": new_ids[:5],
-                "sample_updated": updated_ids[:5],
-                "sample_unchanged": unchanged_ids[:5],
-            }
-    except (sqlite3.DatabaseError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=f"预检失败：{exc}") from exc
-    finally:
-        connection.close()
-    return {
-        "schema_version": payload.schema_version,
-        "mode": payload.mode,
-        "tables": {table: info["incoming"] for table, info in diffs.items()},
-        "diff": diffs,
-        "total": sum(info["incoming"] for info in diffs.values()),
-        "summary": {
-            "new": sum(info["new"] for info in diffs.values()),
-            "updated": sum(info["updated"] for info in diffs.values()),
-            "unchanged": sum(info["unchanged"] for info in diffs.values()),
-        },
-    }
+    result = C.preview_import_tables(payload.tables, payload.mode)
+    result["schema_version"] = payload.schema_version
+    return result
 
 
 @router.post("/api/data/import")

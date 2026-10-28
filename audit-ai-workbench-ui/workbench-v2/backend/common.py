@@ -24,7 +24,7 @@ NOTE_TAGS = (
     "模型", "数据请求", "口径", "风险", "数据质量", "规则变更", "项目复盘",
 )
 
-APP_VERSION = "1.9.34"
+APP_VERSION = "1.9.35"
 
 ACCESS_COOKIE = "workbench_access"
 PUBLIC_API_PREFIXES = (
@@ -402,6 +402,127 @@ def resolve_backup(name: str) -> Path:
         raise HTTPException(status_code=404, detail="备份不存在")
     return path
 
+
+MAX_BACKUP_UPLOAD_BYTES = 200 * 1024 * 1024
+REQUIRED_BACKUP_TABLES = {"tasks", "sql_assets", "projects"}
+BACKUP_MERGE_SKIP_TABLES = {"app_settings", "calendar_subscriptions"}
+
+
+def validate_sqlite_backup(path: Path) -> dict:
+    if not path.is_file() or path.stat().st_size < 100:
+        raise HTTPException(status_code=400, detail="备份文件无效")
+    with path.open("rb") as handle:
+        header = handle.read(16)
+    if not header.startswith(b"SQLite format 3"):
+        raise HTTPException(status_code=400, detail="不是 SQLite 备份文件（请选择下载的 .db）")
+    connection = sqlite3.connect(path)
+    try:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
+        missing = REQUIRED_BACKUP_TABLES - tables
+        if missing:
+            raise HTTPException(status_code=400, detail=f"备份结构不完整，缺少：{', '.join(sorted(missing))}")
+        counts = {
+            table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+            for table in EXPORT_TABLES
+            if table in tables
+        }
+    except sqlite3.DatabaseError as exc:
+        raise HTTPException(status_code=400, detail=f"无法读取备份：{exc}") from exc
+    finally:
+        connection.close()
+    return {"tables": sorted(tables), "counts": counts, "size": path.stat().st_size}
+
+
+def save_uploaded_backup(content: bytes, original_name: str = "") -> Path:
+    if len(content) > MAX_BACKUP_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="备份文件超过 200MB 上限")
+    if not content.startswith(b"SQLite format 3"):
+        raise HTTPException(status_code=400, detail="不是 SQLite 备份文件（请选择下载的 .db）")
+    stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S-%f")
+    target = backup_directory() / f"workbench-{stamp}-imported.db"
+    tmp = target.with_suffix(".db.tmp")
+    try:
+        tmp.write_bytes(content)
+        validate_sqlite_backup(tmp)
+        tmp.replace(target)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        target.unlink(missing_ok=True)
+        raise
+    return target
+
+
+def backup_merge_table_names(requested: list[str] | None = None) -> list[str]:
+    if requested:
+        unknown = set(requested) - set(EXPORT_TABLES)
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"不支持合并的数据表：{', '.join(sorted(unknown))}")
+        return [table for table in requested if table not in BACKUP_MERGE_SKIP_TABLES]
+    return [table for table in EXPORT_TABLES if table not in BACKUP_MERGE_SKIP_TABLES]
+
+
+def extract_tables_from_backup(path: Path, tables: list[str] | None = None) -> dict[str, list[dict]]:
+    wanted = backup_merge_table_names(tables)
+    source = sqlite3.connect(path)
+    source.row_factory = sqlite3.Row
+    extracted: dict[str, list[dict]] = {}
+    try:
+        available = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
+        for table in wanted:
+            if table not in available:
+                continue
+            extracted[table] = [dict(row) for row in source.execute(f"SELECT * FROM {table}").fetchall()]
+    finally:
+        source.close()
+    return extracted
+
+
+def preview_import_tables(tables: dict[str, list[dict]], mode: str = "merge") -> dict:
+    unknown = set(tables) - set(EXPORT_TABLES)
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"包含不支持的数据表：{', '.join(sorted(unknown))}")
+    connection = connect()
+    diffs: dict[str, dict] = {}
+    try:
+        for table, rows in tables.items():
+            new_ids: list[str] = []
+            updated_ids: list[str] = []
+            unchanged_ids: list[str] = []
+            for source_row in rows:
+                row = normalize_import_row(connection, table, source_row)
+                existing = connection.execute(f"SELECT * FROM {table} WHERE id = ?", (row["id"],)).fetchone()
+                if not existing:
+                    new_ids.append(row["id"])
+                    continue
+                existing_normalized = normalize_import_row(connection, table, row_to_dict(existing))
+                if comparable_row(existing_normalized) == comparable_row(row):
+                    unchanged_ids.append(row["id"])
+                else:
+                    updated_ids.append(row["id"])
+            diffs[table] = {
+                "incoming": len(rows),
+                "new": len(new_ids),
+                "updated": len(updated_ids),
+                "unchanged": len(unchanged_ids),
+                "sample_new": new_ids[:5],
+                "sample_updated": updated_ids[:5],
+                "sample_unchanged": unchanged_ids[:5],
+            }
+    except (sqlite3.DatabaseError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"预检失败：{exc}") from exc
+    finally:
+        connection.close()
+    return {
+        "mode": mode,
+        "tables": {table: info["incoming"] for table, info in diffs.items()},
+        "diff": diffs,
+        "total": sum(info["incoming"] for info in diffs.values()),
+        "summary": {
+            "new": sum(info["new"] for info in diffs.values()),
+            "updated": sum(info["updated"] for info in diffs.values()),
+            "unchanged": sum(info["unchanged"] for info in diffs.values()),
+        },
+    }
 
 
 def normalize_import_row(connection: sqlite3.Connection, table: str, row: dict) -> dict:
