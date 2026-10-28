@@ -168,6 +168,67 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(inspect.status_code, 200)
         self.assertTrue(inspect.json()["has_content"])
 
+    def test_full_restore_replaces_and_merge_keeps_local_rows(self):
+        import shutil
+        import sqlite3
+
+        from backend import common as C
+
+        original_title = self.client.get("/api/tasks/T-001").json()["title"]
+        original_progress = self.client.get("/api/projects/P-001").json()["project"]["progress"]
+        relation_count = len(self.client.get("/api/projects/P-001").json()["relations"])
+        created = self.client.post("/api/backups")
+        backup_name = created.json()["name"]
+
+        extra = self.client.post(
+            "/api/tasks",
+            json={"title": "仅当前库存在的任务", "planned_date": "2099-04-01"},
+        )
+        extra_id = extra.json()["id"]
+        self.client.patch("/api/tasks/T-001", json={"title": "整库恢复后应回滚的标题"})
+        self.client.patch("/api/projects/P-001", json={"progress": 11})
+
+        restored = self.client.post(f"/api/backups/{backup_name}/restore")
+        self.assertEqual(restored.status_code, 200)
+        self.assertEqual(self.client.get("/api/tasks/T-001").json()["title"], original_title)
+        self.assertEqual(self.client.get("/api/projects/P-001").json()["project"]["progress"], original_progress)
+        self.assertEqual(len(self.client.get("/api/projects/P-001").json()["relations"]), relation_count)
+        self.assertEqual(self.client.get(f"/api/tasks/{extra_id}").status_code, 404)
+
+        local = self.client.post(
+            "/api/tasks",
+            json={"title": "合并后应保留的本地任务", "planned_date": "2099-04-02"},
+        )
+        local_id = local.json()["id"]
+        self.client.patch("/api/tasks/T-001", json={"title": "合并后应被备份覆盖"})
+        self.client.put("/api/settings", json={"backup_retention": 7})
+
+        merged = self.client.post(f"/api/backups/{backup_name}/merge", json={"mode": "merge"})
+        self.assertEqual(merged.status_code, 200)
+        self.assertEqual(self.client.get("/api/tasks/T-001").json()["title"], original_title)
+        self.assertEqual(self.client.get(f"/api/tasks/{local_id}").status_code, 200)
+        self.assertEqual(self.client.get("/api/settings").json()["backup_retention"], 7)
+        self.assertIn("calendar_events", merged.json()["skipped_tables"])
+
+        empty_name = "workbench-empty-full-imported.db"
+        empty_path = C.backup_directory() / empty_name
+        shutil.copy(C.resolve_backup(backup_name), empty_path)
+        conn = sqlite3.connect(empty_path)
+        conn.execute("PRAGMA foreign_keys = OFF")
+        skip = C.BACKUP_MERGE_SKIP_TABLES | {"saved_searches", "recent_searches"}
+        for table in C.EXPORT_TABLES:
+            if table in skip:
+                continue
+            conn.execute(f"DELETE FROM {table}")
+        conn.commit()
+        conn.close()
+        blocked_restore = self.client.post(f"/api/backups/{empty_name}/restore")
+        blocked_merge = self.client.post(f"/api/backups/{empty_name}/merge", json={"mode": "merge"})
+        self.assertEqual(blocked_restore.status_code, 400)
+        self.assertEqual(blocked_merge.status_code, 400)
+        self.assertEqual(self.client.get("/api/tasks/T-001").json()["title"], original_title)
+        self.assertEqual(self.client.get(f"/api/tasks/{local_id}").status_code, 200)
+
     def test_unified_search_and_data_exchange(self):
         search = self.client.get("/api/search", params={"q": "采购付款"})
         self.assertEqual(search.status_code, 200)

@@ -24,7 +24,7 @@ NOTE_TAGS = (
     "模型", "数据请求", "口径", "风险", "数据质量", "规则变更", "项目复盘",
 )
 
-APP_VERSION = "1.9.36"
+APP_VERSION = "1.9.37"
 
 ACCESS_COOKIE = "workbench_access"
 PUBLIC_API_PREFIXES = (
@@ -455,7 +455,7 @@ def resolve_backup(name: str) -> Path:
 
 MAX_BACKUP_UPLOAD_BYTES = 200 * 1024 * 1024
 REQUIRED_BACKUP_TABLES = {"tasks", "sql_assets", "projects"}
-BACKUP_MERGE_SKIP_TABLES = {"app_settings", "calendar_subscriptions"}
+BACKUP_MERGE_SKIP_TABLES = {"app_settings", "calendar_subscriptions", "calendar_events"}
 
 
 def validate_sqlite_backup(path: Path) -> dict:
@@ -525,6 +525,39 @@ def expand_restore_tables(tables: list[str]) -> list[str]:
     return [table for table in RESTORE_INSERT_ORDER if table in selected]
 
 
+def apply_sqlite_backup(source_path: Path, dest_path: Path | None = None) -> None:
+    destination = connect(dest_path)
+    source = sqlite3.connect(str(source_path.resolve().as_posix()))
+    try:
+        destination.execute("PRAGMA foreign_keys = OFF")
+        source.backup(destination)
+        destination.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        destination.execute("PRAGMA foreign_keys = ON")
+    finally:
+        source.close()
+        destination.close()
+
+
+def restore_database_from_backup(backup_path: Path) -> dict:
+    validation = validate_sqlite_backup(backup_path)
+    if backup_content_row_count(validation["counts"]) <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="备份里没有业务数据，已拒绝整库恢复以免清空当前库。请使用工作台「下载」的备份，不要直接复制正在运行的 workbench.db。",
+        )
+    safety = create_database_backup("before-restore")
+    try:
+        apply_sqlite_backup(backup_path)
+    except Exception:
+        try:
+            apply_sqlite_backup(safety)
+        except Exception:
+            pass
+        raise
+    migrate_db()
+    return {"restored": backup_path.name, "safety_backup": safety.name, "counts": validation["counts"]}
+
+
 def restore_tables_from_backup(backup_path: Path, tables: list[str]) -> dict:
     validation = validate_sqlite_backup(backup_path)
     available = set(validation["tables"])
@@ -575,8 +608,10 @@ def backup_merge_table_names(requested: list[str] | None = None) -> list[str]:
         unknown = set(requested) - set(EXPORT_TABLES)
         if unknown:
             raise HTTPException(status_code=400, detail=f"不支持合并的数据表：{', '.join(sorted(unknown))}")
-        return [table for table in requested if table not in BACKUP_MERGE_SKIP_TABLES]
-    return [table for table in EXPORT_TABLES if table not in BACKUP_MERGE_SKIP_TABLES]
+        selected = {table for table in requested if table not in BACKUP_MERGE_SKIP_TABLES}
+    else:
+        selected = {table for table in EXPORT_TABLES if table not in BACKUP_MERGE_SKIP_TABLES}
+    return [table for table in RESTORE_INSERT_ORDER if table in selected]
 
 
 def extract_tables_from_backup(path: Path, tables: list[str] | None = None) -> dict[str, list[dict]]:
@@ -668,11 +703,17 @@ def import_tables(tables: dict[str, list[dict]], mode: str) -> dict:
     unknown = set(tables) - set(EXPORT_TABLES)
     if unknown:
         raise HTTPException(status_code=400, detail=f"包含不支持的数据表：{', '.join(sorted(unknown))}")
+    ordered = [table for table in RESTORE_INSERT_ORDER if table in tables]
+    ordered.extend(table for table in tables if table not in ordered)
     backup = create_database_backup("before-import")
     counts: dict[str, int] = {}
+    connection = connect()
     try:
-        with transaction() as connection:
-            for table, rows in tables.items():
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("BEGIN")
+        try:
+            for table in ordered:
+                rows = tables.get(table) or []
                 counts[table] = 0
                 for source_row in rows:
                     row = normalize_import_row(connection, table, source_row)
@@ -688,8 +729,15 @@ def import_tables(tables: dict[str, list[dict]], mode: str) -> dict:
                         sql = f"INSERT OR IGNORE INTO {table} ({','.join(columns)}) VALUES ({placeholders})"
                     result = connection.execute(sql, tuple(row[column] for column in columns))
                     counts[table] += max(result.rowcount, 0)
+            connection.execute("COMMIT")
+        except Exception:
+            connection.execute("ROLLBACK")
+            raise
+        connection.execute("PRAGMA foreign_keys = ON")
     except (sqlite3.DatabaseError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"导入失败：{exc}") from exc
+    finally:
+        connection.close()
     return {"imported": counts, "mode": mode, "safety_backup": backup.name}
 
 

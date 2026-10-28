@@ -4,13 +4,12 @@ from pathlib import Path
 import csv
 import io
 import json
-import sqlite3
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 
 from .. import common as C
-from ..db import connect, migrate_db, utc_now
+from ..db import utc_now
 from ..schemas import BackupMergePayload, CsvImportPayload, DataImportPayload, TableRestorePayload
 
 router = APIRouter(tags=["data"])
@@ -154,23 +153,7 @@ def inspect_backup(name: str) -> dict:
 
 @router.post("/api/backups/{name}/restore")
 def restore_backup(name: str) -> dict:
-    backup_path = C.resolve_backup(name)
-    validation = C.validate_sqlite_backup(backup_path)
-    if C.backup_content_row_count(validation["counts"]) <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="备份里没有业务数据，已拒绝整库恢复以免清空当前库。请使用工作台「下载」的备份，不要直接复制正在运行的 workbench.db。",
-        )
-    safety = C.create_database_backup("before-restore")
-    source = sqlite3.connect(backup_path)
-    target = connect()
-    try:
-        source.backup(target)
-    finally:
-        target.close()
-        source.close()
-    migrate_db()
-    return {"restored": name, "safety_backup": safety.name}
+    return C.restore_database_from_backup(C.resolve_backup(name))
 
 
 @router.post("/api/backups/{name}/restore-tables")
@@ -186,20 +169,25 @@ def restore_backup_tables(name: str, payload: TableRestorePayload) -> dict:
 @router.post("/api/backups/{name}/merge-preview")
 def preview_backup_merge(name: str, payload: BackupMergePayload = BackupMergePayload()) -> dict:
     path = C.resolve_backup(name)
-    C.validate_sqlite_backup(path)
+    validation = C.validate_sqlite_backup(path)
+    if C.backup_content_row_count(validation["counts"]) <= 0:
+        raise HTTPException(status_code=400, detail="备份里没有业务数据，合并不会写入任何内容，已取消。")
     tables = C.extract_tables_from_backup(path, payload.tables)
     result = C.preview_import_tables(tables, payload.mode)
     result["backup"] = name
     result["skipped_tables"] = sorted(C.BACKUP_MERGE_SKIP_TABLES)
+    result["has_content"] = True
     return result
 
 
 @router.post("/api/backups/{name}/merge")
 def merge_backup(name: str, payload: BackupMergePayload = BackupMergePayload()) -> dict:
     path = C.resolve_backup(name)
-    C.validate_sqlite_backup(path)
+    validation = C.validate_sqlite_backup(path)
+    if C.backup_content_row_count(validation["counts"]) <= 0:
+        raise HTTPException(status_code=400, detail="备份里没有业务数据，合并不会写入任何内容，已取消。")
     tables = C.extract_tables_from_backup(path, payload.tables)
-    if not tables:
+    if not any(tables.values()):
         raise HTTPException(status_code=400, detail="备份中没有可合并的数据表")
     result = C.import_tables(tables, payload.mode)
     result["backup"] = name

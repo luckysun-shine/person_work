@@ -4464,6 +4464,10 @@ function mergeSummaryText(preview) {
 }
 
 async function mergeBackupIntoCurrent(name, { skipConfirm = false } = {}) {
+  const inspect = await apiRequest(`/api/backups/${encodeURIComponent(name)}/inspect`);
+  if (!inspect.has_content) {
+    throw new Error('这份备份没有业务数据，合并已取消，当前库未改动。');
+  }
   const preview = await apiRequest(`/api/backups/${encodeURIComponent(name)}/merge-preview`, {
     method: 'POST',
     body: JSON.stringify({ mode: 'merge' }),
@@ -4548,7 +4552,7 @@ function renderBackups() {
     const restore = make('button', 'secondary-button danger-button', '整库恢复');
     restore.type = 'button';
     restore.addEventListener('click', async () => {
-      if (!await showConfirm({ title: '整库恢复', message: `确认整库恢复备份 ${backup.name} 吗？当前数据库会先自动备份。`, confirmText: '恢复', danger: true })) return;
+      if (!await showConfirm({ title: '整库恢复', message: `确认用 ${backup.name} 整库覆盖当前数据吗？这会替换全部业务表，当前库会先自动备份。空备份会被拒绝。`, confirmText: '恢复', danger: true })) return;
       try {
         await apiRequest(`/api/backups/${encodeURIComponent(backup.name)}/restore`, { method: 'POST' });
         showToast('数据库已恢复，正在重新载入');
