@@ -170,6 +170,7 @@ class ModelCreate(BaseModel):
     sql_text: str = Field(default="", max_length=200000)
     sql_current_version: str = Field(default="v1.0", min_length=1, max_length=40)
     change_summary: str = Field(default="创建监测模型", max_length=1000)
+    project_id: str | None = Field(default=None, max_length=80)
 
 
 class ModelUpdate(BaseModel):

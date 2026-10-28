@@ -89,6 +89,7 @@ async function apiRequest(path, options = {}) {
   if (token) headers['X-Workbench-Access'] = token;
   const response = await fetch(path, {
     credentials: 'same-origin',
+    cache: 'no-store',
     ...rest,
     headers,
   });
@@ -931,11 +932,12 @@ function renderHomeWeekCalendar() {
 
     const day = make('div', 'home-week-day');
     if (iso === todayIso) day.classList.add('is-today');
+    if (index >= 5) day.classList.add('is-weekend');
     day.dataset.date = iso;
     day.title = `${date.getMonth() + 1}月${date.getDate()}日`;
 
     const head = make('header', 'home-week-day-head');
-    head.append(make('span', '', weekdays[index]), make('b', '', String(date.getDate())));
+    head.append(make('span', '', weekdays[index]), make('b', 'home-week-date', String(date.getDate())));
     day.append(head);
 
     const list = make('div', 'home-week-day-list');
@@ -1133,7 +1135,7 @@ function renderWeekBoard() {
     if (iso === todayIso) labelWrap.append(make('em', 'day-today-tag', '今天'));
     const dayTasks = state.weekTasks.filter(task => task.planned_date === iso);
     const dayEvents = events.filter(event => eventDateKey(event.start_at) === iso);
-    header.append(labelWrap, make('b', '', String(date.getDate())));
+    header.append(labelWrap, make('b', 'day-date-badge', String(date.getDate())));
     column.append(header);
     const count = make('div', 'day-column-count', `${dayTasks.length} 计划 · ${dayEvents.length} 日程`);
     column.append(count);
@@ -1376,7 +1378,7 @@ async function generateWeeklyReport() {
     state.currentGeneratedReportId = null;
     const aiReady = !!state.settings?.ai?.ready;
     if ((!template || template.type === 'weekly') && aiReady) {
-      if (!window.confirm('将使用已配置的 AI 润色周报草稿。仅发送标题与各段落正文，不会上传完整数据库。是否继续？')) return;
+      if (!await confirmContinue('将使用已配置的 AI 润色周报草稿。仅发送标题与各段落正文，不会上传完整数据库。')) return;
     }
     if (!template || template.type === 'weekly') renderWeeklyReport(await apiRequest(`/api/weekly-reports/${weekStart}/generate`, { method: 'POST' }));
     else {
@@ -1399,7 +1401,7 @@ async function polishWeeklyReport() {
     openAiSettings();
     return;
   }
-  if (!window.confirm('将把当前编辑区的标题与四段正文发送给 AI 润色（不重新拉数、不上传 SQL）。是否继续？')) return;
+  if (!await confirmContinue('将把当前编辑区的标题与四段正文发送给 AI 润色（不重新拉数、不上传 SQL）。')) return;
   try {
     const weekStart = $('#reportWeekStart').value;
     const polished = await apiRequest(`/api/weekly-reports/${weekStart}/polish`, {
@@ -1464,7 +1466,7 @@ async function saveWeeklyReport(status = 'draft', changeSummary = '保存草稿'
 
 async function finalizeCurrentReport() {
   if (!$('#reportTitle').value.trim()) { showToast('请先填写并保存报告内容'); return; }
-  if (!window.confirm('确认将当前报告定稿吗？定稿后仍可继续编辑并产生新版本。')) return;
+  if (!await showConfirm({ title: '确认定稿', message: '确认将当前报告定稿吗？定稿后仍可继续编辑并产生新版本。', confirmText: '定稿' })) return;
   const template = currentReportTemplate();
   try {
     if (!template || template.type === 'weekly') {
@@ -1969,11 +1971,95 @@ function closeModal(modal) {
   });
   if (!stillOpen.length) document.body.classList.remove('modal-open');
 }
-$$('.modal-close').forEach(button => button.addEventListener('click', () => closeModal(button.closest('.modal'))));
-$$('.modal').forEach(modal => modal.addEventListener('click', event => {
+let appDialogResolver = null;
+
+function settleAppDialog(ok) {
+  const resolver = appDialogResolver;
+  appDialogResolver = null;
+  const isPrompt = $('#appDialogField') && !$('#appDialogField').hidden;
+  const value = $('#appDialogInput')?.value ?? '';
+  closeModal($('#appDialog'));
+  if (!resolver) return;
+  resolver(isPrompt ? (ok ? value.trim() : null) : Boolean(ok));
+}
+
+function showConfirm({
+  title = '请确认',
+  message = '',
+  confirmText = '确认',
+  cancelText = '取消',
+  danger = false,
+  input = null,
+} = {}) {
+  return new Promise(resolve => {
+    if (appDialogResolver) settleAppDialog(input ? null : false);
+    appDialogResolver = resolve;
+    if ($('#appDialogEyebrow')) $('#appDialogEyebrow').textContent = input ? 'INPUT' : (danger ? 'DELETE' : 'CONFIRM');
+    if ($('#appDialogTitle')) $('#appDialogTitle').textContent = title;
+    if ($('#appDialogMessage')) $('#appDialogMessage').textContent = message;
+    const field = $('#appDialogField');
+    const inputEl = $('#appDialogInput');
+    if (field && inputEl) {
+      field.hidden = !input;
+      inputEl.value = input?.value || '';
+      inputEl.placeholder = input?.placeholder || '';
+    }
+    const ok = $('#appDialogConfirm');
+    const cancel = $('#appDialogCancel');
+    if (ok) {
+      ok.textContent = confirmText;
+      ok.classList.toggle('danger-button', Boolean(danger));
+      ok.classList.toggle('primary-button', !danger);
+    }
+    if (cancel) cancel.textContent = cancelText;
+    openModal($('#appDialog'));
+    requestAnimationFrame(() => (input ? inputEl : ok)?.focus());
+  });
+}
+
+function showPrompt({ title = '请输入', message = '', value = '', placeholder = '', confirmText = '保存', cancelText = '取消' } = {}) {
+  return showConfirm({ title, message, confirmText, cancelText, danger: false, input: { value, placeholder } });
+}
+
+function confirmDelete(message, title = '确认删除') {
+  return showConfirm({ title, message, confirmText: '删除', cancelText: '取消', danger: true });
+}
+
+function confirmContinue(message, title = '请确认') {
+  return showConfirm({ title, message, confirmText: '继续', cancelText: '取消', danger: false });
+}
+
+$('#appDialogConfirm')?.addEventListener('click', () => settleAppDialog(true));
+$('#appDialogCancel')?.addEventListener('click', () => settleAppDialog(false));
+document.addEventListener('keydown', event => {
+  if (!$('#appDialog')?.classList.contains('open')) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    settleAppDialog(false);
+  } else if (event.key === 'Enter' && event.target?.tagName !== 'TEXTAREA') {
+    event.preventDefault();
+    settleAppDialog(true);
+  }
+});
+
+$$('.modal-close').forEach(button => button.addEventListener('click', () => {
+  const modal = button.closest('.modal');
+  if (modal?.id === 'appDialog') { settleAppDialog(false); return; }
+  closeModal(modal);
+}));
+$$('.modal').forEach(modal => modal.addEventListener('click', async event => {
   if (event.target !== modal) return;
-  if (modal.id === 'projectRelationModal' && ledgerDetailHasUnsavedChanges()
-    && !window.confirm('台账详情中有尚未保存的修改，确认关闭吗？')) return;
+  if (modal.id === 'appDialog') { settleAppDialog(false); return; }
+  if (modal.id === 'projectRelationModal' && ledgerDetailHasUnsavedChanges()) {
+    const ok = await showConfirm({
+      title: '未保存的修改',
+      message: '台账详情中有尚未保存的修改，确认关闭吗？',
+      confirmText: '关闭',
+      cancelText: '继续编辑',
+    });
+    if (!ok) return;
+  }
   closeModal(modal);
 }));
 
@@ -2010,7 +2096,7 @@ function openTaskForm(task = null, plannedDate = null) {
 }
 
 async function deleteTask(id) {
-  if (!id || !window.confirm('确认删除这个任务吗？')) return;
+  if (!id || !await confirmDelete('确认删除这个任务吗？')) return;
   try {
     await apiRequest(`/api/tasks/${id}`, { method: 'DELETE' });
     closeModal($('#taskModal')); closeEntityDrawer(); await Promise.all([refreshWeekTasks(), refreshTodayTasks()]); showToast('任务已删除');
@@ -2291,7 +2377,7 @@ async function refreshNotes() {
 }
 
 async function deleteNote(id) {
-  if (!window.confirm('确认删除这条工作记录吗？')) return;
+  if (!await confirmDelete('确认删除这条工作记录吗？')) return;
   try {
     if (state.apiAvailable) await apiRequest(`/api/notes/${id}`, { method: 'DELETE' });
     state.notes = state.notes.filter(note => note.id !== id);
@@ -2354,7 +2440,7 @@ $('#recordForm').addEventListener('submit', async event => {
 
 $('#noteBatchDelete').addEventListener('click', async () => {
   const ids = [...state.selectedNotes];
-  if (!ids.length || !window.confirm(`确认删除所选 ${ids.length} 条工作记录吗？`)) return;
+  if (!ids.length || !await confirmDelete(`确认删除所选 ${ids.length} 条工作记录吗？`)) return;
   try {
     if (state.apiAvailable) await apiRequest('/api/notes/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) });
     state.notes = state.notes.filter(note => !state.selectedNotes.has(note.id));
@@ -2535,7 +2621,7 @@ async function refreshRequests() {
 }
 
 async function deleteRequest(id) {
-  if (!window.confirm('确认删除这个数据请求吗？')) return;
+  if (!await confirmDelete('确认删除这个数据请求吗？')) return;
   try { await apiRequest(`/api/data-requests/${id}`, { method: 'DELETE' }); closeModal($('#requestModal')); closeEntityDrawer(); await refreshRequests(); showToast('数据请求已删除'); }
   catch (error) { showToast(error.message); }
 }
@@ -2634,7 +2720,10 @@ async function batchRequest(path, success) {
   catch (error) { showToast(error.message); }
 }
 $('#requestBatchDone').addEventListener('click', () => batchRequest('/api/data-requests/batch-status', '所选请求已标记为已交付'));
-$('#requestBatchDelete').addEventListener('click', () => { if (window.confirm(`确认删除所选 ${state.selectedRequests.size} 个请求吗？`)) batchRequest('/api/data-requests/batch-delete', '所选请求已删除'); });
+$('#requestBatchDelete').addEventListener('click', async () => {
+  if (!await confirmDelete(`确认删除所选 ${state.selectedRequests.size} 个请求吗？`)) return;
+  batchRequest('/api/data-requests/batch-delete', '所选请求已删除');
+});
 
 function openSqlForm(asset = null) {
   $('#sqlForm').reset();
@@ -2676,9 +2765,9 @@ $('#analyzeSqlButton').addEventListener('click', async () => {
   if (!sqlText) { showToast('请先填写 SQL 文本'); return; }
   const ai = state.settings?.ai || {};
   if (ai.ready && ai.include_sql_text !== false) {
-    if (!window.confirm('当前允许向模型发送 SQL 正文。将发送：资产名称 + 完整 SQL。若只想发结构摘要，请先在数据管理关闭「允许向模型发送 SQL 正文」。是否继续？')) return;
+    if (!await confirmContinue('当前允许向模型发送 SQL 正文。将发送：资产名称 + 完整 SQL。若只想发结构摘要，请先在数据管理关闭「允许向模型发送 SQL 正文」。')) return;
   } else if (ai.ready) {
-    if (!window.confirm('将调用 AI 辅助（已关闭 SQL 正文外发，仅发送名称与本地规则摘要）。是否继续？')) return;
+    if (!await confirmContinue('将调用 AI 辅助（已关闭 SQL 正文外发，仅发送名称与本地规则摘要）。')) return;
   }
   try {
     renderSqlAssist(await apiRequest('/api/sql-assets/assist', { method: 'POST', body: JSON.stringify({ name: $('#sqlName').value.trim(), sql_text: sqlText }) }));
@@ -2795,7 +2884,7 @@ async function refreshSqlAssets() {
 }
 
 async function deleteSql(id) {
-  if (!id || !window.confirm('确认删除这个 SQL 资产吗？')) return;
+  if (!id || !await confirmDelete('确认删除这个 SQL 资产吗？')) return;
   try { await apiRequest(`/api/sql-assets/${id}`, { method: 'DELETE' }); closeDrawer(); await refreshSqlAssets(); showToast('SQL 资产已删除'); }
   catch (error) { showToast(error.message); }
 }
@@ -2816,7 +2905,7 @@ $('#sqlForm').addEventListener('submit', async event => {
   try {
     if (state.apiAvailable && payload.sql_text.trim()) {
       const check = await apiRequest('/api/sql-assets/sensitive-check', { method: 'POST', body: JSON.stringify({ sql_text: payload.sql_text }) });
-      if (check.count > 0 && !window.confirm(`检测到 ${check.count} 处疑似敏感信息，确认仍要保存吗？`)) return;
+      if (check.count > 0 && !await showConfirm({ title: '检测到敏感信息', message: `检测到 ${check.count} 处疑似敏感信息，确认仍要保存吗？`, confirmText: '仍要保存', danger: true })) return;
     }
     await apiRequest(id ? `/api/sql-assets/${id}` : '/api/sql-assets', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
     closeModal($('#sqlModal')); await refreshSqlAssets(); showToast(id ? 'SQL 资产已更新' : 'SQL 资产已创建');
@@ -2846,7 +2935,10 @@ async function batchSql(path, success) {
   catch (error) { showToast(error.message); }
 }
 $('#sqlBatchValidate').addEventListener('click', () => batchSql('/api/sql-assets/batch-status', '所选 SQL 已标记为已验证'));
-$('#sqlBatchDelete').addEventListener('click', () => { if (window.confirm(`确认删除所选 ${state.selectedSql.size} 个 SQL 资产吗？`)) batchSql('/api/sql-assets/batch-delete', '所选 SQL 已删除'); });
+$('#sqlBatchDelete').addEventListener('click', async () => {
+  if (!await confirmDelete(`确认删除所选 ${state.selectedSql.size} 个 SQL 资产吗？`)) return;
+  batchSql('/api/sql-assets/batch-delete', '所选 SQL 已删除');
+});
 
 const procedureStatusNames = { draft: '草稿', testing: '测试中', active: '生产启用', paused: '已暂停', archived: '已归档' };
 function renderProcedures() {
@@ -2886,7 +2978,7 @@ $('#procedureForm').addEventListener('submit', async event => {
   try { const saved = await apiRequest(id ? `/api/procedures/${id}` : '/api/procedures', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) }); await refreshProcedures(); if (id) await openProcedureForm(saved.id); else closeModal($('#procedureModal')); showToast(id ? '存储过程已更新' : '存储过程已创建'); } catch (error) { showToast(error.message); }
 });
 $('#saveDeploymentButton').addEventListener('click', async () => { const id = $('#procedureId').value; if (!id) return; const payload = { version: $('#procedureVersion').value.trim(), environment: $('#deploymentEnvironment').value, status: $('#deploymentStatus').value, deployed_at: $('#deploymentAt').value || null, validation_result: $('#deploymentValidation').value.trim(), rollback_executed: $('#deploymentRollback').checked, notes: $('#deploymentNotes').value.trim() }; try { await apiRequest(`/api/procedures/${id}/deployments`, { method: 'POST', body: JSON.stringify(payload) }); await openProcedureForm(id); showToast('环境发布记录已保存'); } catch (error) { showToast(error.message); } });
-$('#deleteProcedureButton').addEventListener('click', async () => { const id = $('#procedureId').value; if (!id || !window.confirm('确认删除该存储过程及其版本、发布记录吗？')) return; try { await apiRequest(`/api/procedures/${id}`, { method: 'DELETE' }); closeModal($('#procedureModal')); await refreshProcedures(); showToast('存储过程已删除'); } catch (error) { showToast(error.message); } });
+$('#deleteProcedureButton').addEventListener('click', async () => { const id = $('#procedureId').value; if (!id || !await confirmDelete('确认删除该存储过程及其版本、发布记录吗？')) return; try { await apiRequest(`/api/procedures/${id}`, { method: 'DELETE' }); closeModal($('#procedureModal')); await refreshProcedures(); showToast('存储过程已删除'); } catch (error) { showToast(error.message); } });
 
 $$('[data-model-tab]').forEach(button => button.addEventListener('click', () => {
   $$('[data-model-tab]').forEach(item => item.classList.toggle('active', item === button));
@@ -3066,8 +3158,17 @@ async function refreshModels(selectedId = null) {
   else if (!selected) state.currentModel = null;
 }
 
+function modelLinkedToProject(model, projectId) {
+  if (!model || !projectId) return false;
+  if (model.linked_project_id === projectId) return true;
+  return (model.linked_projects || []).some(item => item.id === projectId)
+    || (state.ledgerDetail?.relations || []).some(item => item.entity_type === 'model' && item.entity_id === model.id);
+}
+
 async function bindModelToCurrentProject(modelId, note = '台账绑定监测模型') {
-  if (!state.currentProject?.id || !modelId) return;
+  if (!state.currentProject?.id || !modelId) {
+    throw new Error('当前没有打开的监管项，无法绑定模型');
+  }
   const exists = (state.ledgerDetail?.relations || []).some(item => item.entity_type === 'model' && item.entity_id === modelId);
   if (exists) return;
   await apiRequest(`/api/projects/${state.currentProject.id}/relations`, {
@@ -3084,13 +3185,14 @@ async function bindModelToCurrentProject(modelId, note = '台账绑定监测模�
 $('#newModelButton')?.addEventListener('click', () => openModelForm());
 $('#editModelButton')?.addEventListener('click', () => state.currentModel && openModelForm(state.currentModel));
 $('#deleteModelButton')?.addEventListener('click', async () => {
-  if (!state.currentModel || !window.confirm(`确认删除模型“${state.currentModel.name}”及其运行、版本记录吗？`)) return;
+  if (!state.currentModel || !await confirmDelete(`确认删除模型“${state.currentModel.name}”及其运行、版本记录吗？`)) return;
   try {
     await apiRequest(`/api/models/${state.currentModel.id}`, { method: 'DELETE' });
     state.currentModel = null;
     if ($('#ledgerModelDetail')) $('#ledgerModelDetail').hidden = true;
     await refreshModels();
-    if (state.currentProject) await openProjectRelations(state.currentProject);
+    await refreshProjects();
+    if (state.currentProject) await openProjectRelations(state.currentProject, 'models');
     showToast('监测模型已删除');
   } catch (error) { showToast(error.message); }
 });
@@ -3099,15 +3201,14 @@ $('#unbindLedgerModelButton')?.addEventListener('click', async () => {
   const relationId = state.ledgerModelRelationId
     || (state.ledgerDetail?.relations || []).find(item => item.entity_type === 'model' && item.entity_id === state.currentModel.id)?.id;
   if (!relationId) { showToast('未找到绑定关系'); return; }
-  if (!window.confirm(`确认解除监管项与模型“${state.currentModel.name}”的绑定吗？模型本身不会删除。`)) return;
+  if (!await showConfirm({ title: '解除绑定', message: `确认解除监管项与模型“${state.currentModel.name}”的绑定吗？模型本身不会删除。`, confirmText: '解除绑定', danger: true })) return;
   try {
     await apiRequest(`/api/projects/${state.currentProject.id}/relations/${relationId}`, { method: 'DELETE' });
     state.currentModel = null;
     state.ledgerModelRelationId = null;
     if ($('#ledgerModelDetail')) $('#ledgerModelDetail').hidden = true;
     await refreshProjects();
-    await openProjectRelations(state.currentProject);
-    setLedgerDetailTab('models');
+    await openProjectRelations(state.currentProject, 'models');
     showToast('已解除模型绑定');
   } catch (error) { showToast(error.message); }
 });
@@ -3139,19 +3240,24 @@ $('#modelForm').addEventListener('submit', async event => {
     change_summary: $('#modelChangeSummary').value.trim() || (id ? '更新模型配置' : '创建监测模型'),
   };
   try {
+    const projectId = !id ? state.currentProject?.id : '';
+    if (projectId) payload.project_id = projectId;
     const saved = await apiRequest(id ? `/api/models/${id}` : '/api/models', { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
     closeModal($('#modelModal'));
-    if (!id && state.currentProject) {
-      try { await bindModelToCurrentProject(saved.id, '新建模型并绑定台账'); } catch (_) {}
+    if (!id && projectId && !modelLinkedToProject(saved, projectId)) {
+      await bindModelToCurrentProject(saved.id, '新建模型并绑定台账');
     }
     await refreshModels(saved.id);
     await refreshProjects();
     if (state.currentProject) {
-      await openProjectRelations(state.currentProject);
-      setLedgerDetailTab('models');
+      await openProjectRelations(state.currentProject, 'models');
       await selectModel(saved);
     }
-    showToast(id ? '监测模型已更新' : '监测模型已创建并绑定');
+    const bound = !id && projectId && (
+      modelLinkedToProject(saved, projectId)
+      || (state.ledgerDetail?.models || []).some(item => item.id === saved.id)
+    );
+    showToast(id ? '监测模型已更新' : (bound || !projectId ? '监测模型已创建并绑定' : '模型已创建，但未能绑定到监管项'));
   } catch (error) { showToast(error.message); }
 });
 
@@ -3260,7 +3366,7 @@ function renderModelRuns(runs) {
     const remove = make('button', 'text-button danger-text', '删除');
     remove.type = 'button';
     remove.addEventListener('click', async () => {
-      if (!window.confirm('确认删除这条运行记录吗？模型的最近运行统计会按剩余记录重算。')) return;
+      if (!await confirmDelete('确认删除这条运行记录吗？模型的最近运行统计会按剩余记录重算。')) return;
       try {
         await apiRequest(`/api/models/${run.model_id}/runs/${run.id}`, { method: 'DELETE' });
         await reloadModelAfterRunChange(run.model_id);
@@ -3322,6 +3428,24 @@ async function refreshProjects() {
   state.projects = await apiRequest('/api/projects');
   renderProjects();
   renderTodayProjects();
+  renderTodayModelsHome();
+}
+
+function syncListedProject(project, extra = {}) {
+  if (!project?.id || !Array.isArray(state.projects)) return false;
+  const listed = state.projects.find(item => item.id === project.id);
+  if (!listed) return false;
+  const models = extra.models || project.linked_models || [];
+  listed.linked_models = models;
+  listed.model_count = Number(project.model_count ?? models.length);
+  listed.model_attention = Number(project.model_attention ?? extra.model_attention ?? listed.model_attention ?? 0);
+  if (project.pending_steps != null) listed.pending_steps = project.pending_steps;
+  if (project.latest_execution !== undefined) listed.latest_execution = project.latest_execution;
+  if (project.relation_count != null) listed.relation_count = project.relation_count;
+  ['name', 'status', 'category', 'next_action', 'goal', 'monitor_cycle', 'plan_detail'].forEach(key => {
+    if (project[key] !== undefined) listed[key] = project[key];
+  });
+  return true;
 }
 
 function ledgerNeedsAttention(project) {
@@ -3417,7 +3541,17 @@ function renderProjects() {
         meta.append(item);
       });
       const footer = make('footer');
-      footer.append(make('span', '', '下一步'), make('strong', '', project.next_action || '待安排'));
+      const next = make('div', 'soft-ledger-next');
+      next.append(make('span', '', '下一步'), make('strong', '', project.next_action || '待安排'));
+      const remove = make('button', 'text-button danger-text soft-ledger-card-delete', '删除');
+      remove.type = 'button';
+      remove.title = `删除监管项 ${project.name}`;
+      remove.addEventListener('click', async event => {
+        event.preventDefault();
+        event.stopPropagation();
+        await deleteLedgerProject(project);
+      });
+      footer.append(next, remove);
       card.append(
         make('h3', '', project.name),
         make('p', '', project.goal || project.plan_detail || '暂未填写规划摘要。'),
@@ -3534,6 +3668,11 @@ async function openProjectRelations(project, preferredTab = null) {
     const data = await apiRequest(`/api/projects/${project.id}`);
     state.currentProject = data.project;
     state.ledgerDetail = data;
+    if (syncListedProject(data.project, { models: data.models || data.project.linked_models || [] })) {
+      renderProjects();
+      renderTodayProjects();
+      renderTodayModelsHome();
+    }
     $('#relationProjectId').value = data.project.id;
     $('#projectRelationTitle').textContent = data.project.name;
     if (preferredTab) state.ledgerDetailTab = preferredTab;
@@ -3648,7 +3787,7 @@ function renderLedgerSteps(steps) {
     const remove = make('button', 'text-button', '删除');
     remove.type = 'button';
     remove.addEventListener('click', async () => {
-      if (!window.confirm(`确认删除步骤“${step.title}”吗？`)) return;
+      if (!await confirmDelete(`确认删除步骤“${step.title}”吗？`)) return;
       try {
         await apiRequest(`/api/projects/${state.currentProject.id}/steps/${step.id}`, { method: 'DELETE' });
         await openProjectRelations(state.currentProject);
@@ -3681,7 +3820,7 @@ function renderLedgerExecutions(executions) {
     const remove = make('button', 'text-button', '删除');
     remove.type = 'button';
     remove.addEventListener('click', async () => {
-      if (!window.confirm('确认删除这条执行记录吗？')) return;
+      if (!await confirmDelete('确认删除这条执行记录吗？')) return;
       try {
         await apiRequest(`/api/projects/${state.currentProject.id}/executions/${item.id}`, { method: 'DELETE' });
         await openProjectRelations(state.currentProject);
@@ -3865,15 +4004,24 @@ $('#archiveProjectButton')?.addEventListener('click', async () => {
   } catch (error) { showToast(error.message); }
 });
 
-$('#deleteProjectButton')?.addEventListener('click', async () => {
-  if (!state.currentProject || !window.confirm(`确认删除监管项“${state.currentProject.name}”吗？步骤、执行记录与关联将一并删除。`)) return;
+async function deleteLedgerProject(project) {
+  if (!project?.id) return;
+  if (!await confirmDelete(`确认删除监管项“${project.name}”吗？步骤、执行记录与关联将一并删除，已绑定的监测模型不会删除。`, '删除监管项')) return;
   try {
-    await apiRequest(`/api/projects/${state.currentProject.id}`, { method: 'DELETE' });
-    closeModal($('#projectRelationModal'));
+    await apiRequest(`/api/projects/${project.id}`, { method: 'DELETE' });
+    if (state.currentProject?.id === project.id) {
+      closeModal($('#projectRelationModal'));
+      state.currentProject = null;
+      state.ledgerDetail = null;
+      state.currentModel = null;
+    }
     await refreshProjects();
     showToast('监管项已删除');
   } catch (error) { showToast(error.message); }
-});
+}
+
+$('#deleteProjectButton')?.addEventListener('click', () => deleteLedgerProject(state.currentProject));
+$('#deleteProjectHeaderButton')?.addEventListener('click', () => deleteLedgerProject(state.currentProject));
 
 function renderProjectRelations(relations) {
   const list = $('#projectRelationList');
@@ -3888,7 +4036,7 @@ function renderProjectRelations(relations) {
     const remove = make('button', 'text-button danger-text', '移除'); remove.type = 'button';
     remove.addEventListener('click', async event => {
       event.stopPropagation();
-      if (!window.confirm(`确认移除与 ${relation.entity_id} 的关联吗？`)) return;
+      if (!await showConfirm({ title: '移除关联', message: `确认移除与 ${relation.entity_id} 的关联吗？`, confirmText: '移除', danger: true })) return;
       try {
         await apiRequest(`/api/projects/${state.currentProject.id}/relations/${relation.id}`, { method: 'DELETE' });
         await refreshProjects();
@@ -4126,7 +4274,7 @@ $('#globalSearchForm').addEventListener('submit', event => { event.preventDefaul
 $('#saveSearchButton').addEventListener('click', async () => {
   const query = $('#globalSearchInput').value.trim();
   if (!query) { showToast('请先输入检索词'); return; }
-  const name = window.prompt('为当前检索条件命名', query.slice(0, 40));
+  const name = await showPrompt({ title: '保存检索条件', message: '为当前检索条件命名，便于下次一键打开。', value: query.slice(0, 40), placeholder: '例如：采购付款异常' });
   if (!name) return;
   try {
     await apiRequest('/api/saved-searches', { method: 'POST', body: JSON.stringify({ name: name.trim(), query, types: state.searchType === 'all' ? '' : state.searchType }) });
@@ -4260,7 +4408,7 @@ function renderBackups() {
     const restore = make('button', 'secondary-button danger-button', '整库恢复');
     restore.type = 'button';
     restore.addEventListener('click', async () => {
-      if (!window.confirm(`确认整库恢复备份 ${backup.name} 吗？当前数据库会先自动备份。`)) return;
+      if (!await showConfirm({ title: '整库恢复', message: `确认整库恢复备份 ${backup.name} 吗？当前数据库会先自动备份。`, confirmText: '恢复', danger: true })) return;
       try {
         await apiRequest(`/api/backups/${encodeURIComponent(backup.name)}/restore`, { method: 'POST' });
         showToast('数据库已恢复，正在重新载入');
@@ -4270,7 +4418,7 @@ function renderBackups() {
     const remove = make('button', 'text-button danger-link', '删除');
     remove.type = 'button';
     remove.addEventListener('click', async () => {
-      if (!window.confirm(`确认删除备份 ${backup.name} 吗？`)) return;
+      if (!await confirmDelete(`确认删除备份 ${backup.name} 吗？`)) return;
       try {
         await apiRequest(`/api/backups/${encodeURIComponent(backup.name)}`, { method: 'DELETE' });
         await refreshBackups();
@@ -4737,7 +4885,7 @@ $('#tableRestoreForm').addEventListener('submit', async event => {
   const tables = $$('input[name="restoreTable"]:checked').map(input => input.value);
   if (!tables.length) { showToast('请至少选择一张表'); return; }
   const name = $('#tableRestoreBackupName').value;
-  if (!window.confirm(`确认从 ${name} 恢复 ${tables.length} 张表吗？`)) return;
+  if (!await showConfirm({ title: '按表恢复', message: `确认从 ${name} 恢复 ${tables.length} 张表吗？`, confirmText: '恢复', danger: true })) return;
   try {
     const result = await apiRequest(`/api/backups/${encodeURIComponent(name)}/restore-tables`, { method: 'POST', body: JSON.stringify({ tables }) });
     closeModal($('#tableRestoreModal'));
@@ -4768,7 +4916,7 @@ async function importJsonFile(file) {
     const preview = await apiRequest('/api/data/import/preview', { method: 'POST', body: JSON.stringify(payload) });
     renderImportDiff(preview);
     $('#importStatus').textContent = `已校验 ${preview.total} 条记录：新增 ${preview.summary.new}，更新 ${preview.summary.updated}，不变 ${preview.summary.unchanged}。`;
-    if (!window.confirm(`已校验 ${preview.total} 条记录（新增 ${preview.summary.new} / 更新 ${preview.summary.updated}）。确认按“${payload.mode === 'merge' ? '合并更新' : '仅新增'}”模式导入吗？`)) return;
+    if (!await showConfirm({ title: '确认导入', message: `已校验 ${preview.total} 条记录（新增 ${preview.summary.new} / 更新 ${preview.summary.updated}）。确认按“${payload.mode === 'merge' ? '合并更新' : '仅新增'}”模式导入吗？`, confirmText: '导入' })) return;
     const result = await apiRequest('/api/data/import', { method: 'POST', body: JSON.stringify(payload) });
     $('#importStatus').textContent = `导入完成；安全备份：${result.safety_backup}。即将刷新数据。`; showToast('JSON 数据已导入'); setTimeout(() => location.reload(), 900);
   } catch (error) { $('#importStatus').textContent = error.message; showToast(error.message); }
@@ -4777,7 +4925,7 @@ async function importJsonFile(file) {
 async function importCsvFile(file) {
   try {
     const payload = { entity: $('#csvImportEntity').value, csv_text: await file.text(), mode: $('#dataImportMode').value };
-    if (!window.confirm(`确认导入 ${file.name} 吗？导入前会自动创建安全备份。`)) return;
+    if (!await showConfirm({ title: '确认导入', message: `确认导入 ${file.name} 吗？导入前会自动创建安全备份。`, confirmText: '导入' })) return;
     const result = await apiRequest('/api/data/import.csv', { method: 'POST', body: JSON.stringify(payload) });
     $('#importStatus').textContent = `CSV 导入完成；安全备份：${result.safety_backup}。即将刷新数据。`; showToast('CSV 数据已导入'); setTimeout(() => location.reload(), 900);
   } catch (error) { $('#importStatus').textContent = error.message; showToast(error.message); }
@@ -5006,7 +5154,7 @@ $('#navigationForm').addEventListener('submit', async event => {
 });
 $('#deleteNavigationButton').addEventListener('click', async () => {
   const id = $('#navigationId').value;
-  if (!id || !window.confirm('确认删除这个导航入口吗？')) return;
+  if (!id || !await confirmDelete('确认删除这个导航入口吗？')) return;
   try {
     await apiRequest(`/api/navigation/${id}`, { method: 'DELETE' });
     closeModal($('#navigationModal'));

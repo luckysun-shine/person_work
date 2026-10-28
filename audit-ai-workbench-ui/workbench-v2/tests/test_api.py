@@ -328,6 +328,29 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(self.client.delete(f"/api/projects/{project_id}").status_code, 204)
         self.assertEqual(self.client.delete(f"/api/models/{model_id}").status_code, 204)
 
+    def test_create_model_binds_to_project(self):
+        project = self.client.post("/api/projects", json={"name": "绑定测试监管项", "type": "monitor"}).json()
+        project_id = project["id"]
+        missing = self.client.post("/api/models", json={"name": "无效绑定模型", "project_id": "ML-NOT-FOUND"})
+        self.assertEqual(missing.status_code, 404)
+        created = self.client.post(
+            "/api/models",
+            json={"name": "自动绑定监测模型", "project_id": project_id, "purpose": "创建时写入台账关系"},
+        )
+        self.assertEqual(created.status_code, 201)
+        body = created.json()
+        self.assertEqual(body["linked_project_id"], project_id)
+        self.assertTrue(any(item["id"] == project_id for item in body.get("linked_projects") or []))
+        detail = self.client.get(f"/api/projects/{project_id}").json()
+        self.assertTrue(any(item["id"] == body["id"] for item in detail.get("models") or []))
+        self.assertTrue(any(
+            item["entity_type"] == "model" and item["entity_id"] == body["id"]
+            for item in detail.get("relations") or []
+        ))
+        self.assertEqual(self.client.delete(f"/api/projects/{project_id}").status_code, 204)
+        self.assertEqual(self.client.get(f"/api/models/{body['id']}").status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/models/{body['id']}").status_code, 204)
+
     def test_procedure_version_and_deployment_lifecycle(self):
         created = self.client.post("/api/procedures", json={"name": "sp_test_audit", "database_name": "audit_dw", "schema_name": "dbo", "definition_text": "CREATE PROCEDURE dbo.sp_test_audit AS SELECT 1", "rollback_text": "DROP PROCEDURE dbo.sp_test_audit"})
         self.assertEqual(created.status_code, 201)

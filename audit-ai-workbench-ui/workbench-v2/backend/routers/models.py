@@ -72,9 +72,12 @@ def create_model(payload: ModelCreate) -> dict:
     change_summary = values.pop("change_summary")
     sql_text = values.pop("sql_text") or ""
     sql_version = values.pop("sql_current_version") or "v1.0"
+    project_id = (values.pop("project_id", None) or "").strip() or None
     for field in ("rule_definitions", "dependency_ids", "related_sql_ids", "update_steps"):
         values[f"{field}_json"] = json.dumps(values.pop(field), ensure_ascii=False)
     with transaction() as connection:
+        if project_id and not connection.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="监管项不存在，无法绑定模型")
         connection.execute(
             """INSERT INTO monitoring_models
             (id,name,purpose,status,schedule,current_version,rule_definitions_json,dependency_ids_json,
@@ -91,6 +94,13 @@ def create_model(payload: ModelCreate) -> dict:
             (new_id("MV"), model_id, values["current_version"], change_summary, now),
         )
         _seed_model_sql_version(connection, model_id, sql_version, sql_text, "创建模型时记录 SQL", now)
+        if project_id:
+            connection.execute(
+                """INSERT INTO project_relations
+                (id,project_id,entity_type,entity_id,relation_type,note,created_at)
+                VALUES (?,?,?,?,?,?,?)""",
+                (new_id("PR"), project_id, "model", model_id, "dependency", "新建模型并绑定台账", now),
+            )
     model = C.fetch_one("SELECT * FROM monitoring_models WHERE id = ?", (model_id,))
     return _enrich_model(model)
 
