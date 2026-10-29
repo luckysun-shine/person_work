@@ -21,10 +21,10 @@ from .secrets_util import decrypt_secret, encrypt_secret, machine_secret, mask_s
 # Shared domain tags (notes assist + SQL assist)
 NOTE_TAGS = (
     "采购", "付款", "供应商", "固定资产", "费用", "审计报告", "知识库", "SQL",
-    "模型", "数据请求", "口径", "风险", "数据质量", "规则变更", "项目复盘",
+    "模型", "数据请求", "口径", "底表", "风险", "数据质量", "规则变更", "项目复盘",
 )
 
-APP_VERSION = "1.9.40"
+APP_VERSION = "1.9.41"
 
 ACCESS_COOKIE = "workbench_access"
 PUBLIC_API_PREFIXES = (

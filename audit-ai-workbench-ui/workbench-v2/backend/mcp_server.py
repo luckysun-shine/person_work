@@ -256,7 +256,7 @@ def _schema_for(func: Callable) -> dict:
         "priority": "low / medium / high",
         "notes": "备注",
         "content": "记录正文",
-        "note_type": "记录类型，默认随手记录",
+        "note_type": "记录类型：随手记录 / 口径说明 / 底表信息 / 问题排查 / 模型维护 / 项目复盘，默认随手记录",
         "completion_result": "完成说明",
     }
     signature = inspect.signature(func)

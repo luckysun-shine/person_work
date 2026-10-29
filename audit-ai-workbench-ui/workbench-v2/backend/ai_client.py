@@ -89,7 +89,7 @@ def enhance_note_assist(settings: dict, title: str, content: str, local: dict) -
     system = (
         "你是审计监察数据分析师的工作记录助手。"
         "根据标题和正文，返回 JSON："
-        '{"suggested_type":"随手记录|口径说明|问题排查|模型维护|项目复盘",'
+        '{"suggested_type":"随手记录|口径说明|底表信息|问题排查|模型维护|项目复盘",'
         '"suggested_tags":["标签"],"suggested_relation":"编号或null","summary":"一句话摘要","reason":"简要理由"}。'
         "不要编造未出现的事实。"
     )

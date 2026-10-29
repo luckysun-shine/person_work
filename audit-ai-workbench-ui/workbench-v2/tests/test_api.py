@@ -595,6 +595,33 @@ class ApiTestCase(unittest.TestCase):
         empty = self.client.post("/api/notes/assist", json={"title": "", "content": ""})
         self.assertEqual(empty.status_code, 400)
 
+    def test_note_table_catalog_type(self):
+        created = self.client.post(
+            "/api/notes",
+            json={
+                "type": "底表信息",
+                "title": "DW_BI.FACT_TEST_TABLE",
+                "content": "底表用途：测试订单主表。表名 FACT_TEST_TABLE，库名 DW_BI。",
+                "tags": ["SQL"],
+            },
+        )
+        self.assertEqual(created.status_code, 201)
+        listed = self.client.get("/api/notes", params={"type": "底表信息"})
+        self.assertEqual(listed.status_code, 200)
+        self.assertTrue(any(item["id"] == created.json()["id"] for item in listed.json()))
+        found = self.client.get("/api/notes", params={"q": "FACT_TEST_TABLE"})
+        self.assertEqual(found.json()[0]["title"], "DW_BI.FACT_TEST_TABLE")
+        assist = self.client.post(
+            "/api/notes/assist",
+            json={
+                "title": "底表 DW_BI.FACT_NP_SCM_SYS_TRADE_D",
+                "content": "记录数仓底表用途和表名，便于之后查找。",
+            },
+        )
+        self.assertEqual(assist.status_code, 200)
+        self.assertEqual(assist.json()["suggested_type"], "底表信息")
+        self.assertEqual(self.client.delete(f"/api/notes/{created.json()['id']}").status_code, 204)
+
     def test_sql_asset_detail(self):
         assets = self.client.get("/api/sql-assets", params={"q": "采购付款"})
         self.assertEqual(assets.status_code, 200)

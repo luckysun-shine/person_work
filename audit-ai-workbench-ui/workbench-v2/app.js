@@ -61,6 +61,17 @@ const state = {
 };
 
 const HOME_LAYOUT_DEFAULT = ['tasks', 'projects', 'requests', 'quick'];
+const NOTE_TYPES = ['口径说明', '底表信息', '问题排查', '项目复盘', '模型维护', '随手记录'];
+const NOTE_TABLE_TEMPLATE = [
+  '库 / Schema：',
+  '表名：',
+  '用途：',
+  '关键字段：',
+  '数据粒度 / 更新方式：',
+  '关联 SQL 或存储过程：',
+  '备注：',
+  '',
+].join('\n');
 
 const requestStatus = {
   pending: ['待处理', 'waiting'], waiting: ['待确认', 'waiting'], working: ['处理中', 'working'],
@@ -2259,6 +2270,24 @@ $$('#markdownToolbar [data-md]').forEach(button => {
 });
 $('#toggleNotePreview')?.addEventListener('click', () => setNotePreviewMode(!state.notePreviewMode));
 
+function applyNoteTypeUi(type, { fillTemplate = false } = {}) {
+  const title = $('#recordTitle');
+  const content = $('#recordContent');
+  if (!title || !content) return;
+  if (type === '底表信息') {
+    title.placeholder = '例如：DW_BI.FACT_NP_SCM_SYS_TRADE_D';
+    content.placeholder = '库名、表名、用途、关键字段、更新方式、关联 SQL…';
+    if (fillTemplate && !content.value.trim()) content.value = NOTE_TABLE_TEMPLATE;
+  } else {
+    title.placeholder = '一句话说明这条记录';
+    content.placeholder = '支持 Markdown：标题、列表、粗体、代码块、链接…';
+  }
+}
+
+$('#recordType')?.addEventListener('change', () => {
+  applyNoteTypeUi($('#recordType').value, { fillTemplate: !$('#recordId').value });
+});
+
 async function openRecord(note = null) {
   $('#recordForm').reset();
   state.noteAssist = null; $('#noteAssistPanel').hidden = true;
@@ -2268,6 +2297,7 @@ async function openRecord(note = null) {
   $('#recordType').value = note?.type || '随手记录';
   $('#recordTitle').value = note?.title || '';
   $('#recordContent').value = note?.content || '';
+  applyNoteTypeUi($('#recordType').value, { fillTemplate: !note });
   $('#recordTags').value = (note?.tags || []).join(', ');
   fillEntityRelationOptions();
   $('#recordRelation').value = note?.relation || note?.related_entity_id || '';
@@ -2328,6 +2358,7 @@ $('#analyzeNoteButton').addEventListener('click', async () => {
 $('#applyNoteAssist').addEventListener('click', () => {
   const result = state.noteAssist; if (!result) return;
   $('#recordType').value = result.suggested_type;
+  applyNoteTypeUi($('#recordType').value);
   const tags = [...new Set([...splitValues($('#recordTags').value), ...result.suggested_tags])];
   $('#recordTags').value = tags.join(', ');
   if (!$('#recordRelation').value.trim() && result.suggested_relation) $('#recordRelation').value = result.suggested_relation;
@@ -2400,7 +2431,7 @@ function renderSavedNotes() {
 function renderNoteFilters() {
   const container = $('#noteCategoryFilters');
   if (!container) return;
-  const types = ['口径说明', '问题排查', '项目复盘', '模型维护', '随手记录'];
+  const types = NOTE_TYPES;
   container.replaceChildren();
   [['all', '全部记录'], ...types.map(type => [type, type])].forEach(([value, label]) => {
     const count = value === 'all' ? state.notes.length : state.notes.filter(note => note.type === value).length;
